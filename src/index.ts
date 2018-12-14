@@ -11,6 +11,10 @@ interface QueueListener {
     (): any
 }
 
+interface ListenerSubscription {
+    forget()
+}
+
 class Queue<T> {
     private queue: QueueItem<T>[] = []
     private listenersUp: Map<number, QueueListener[]> = new Map()
@@ -41,7 +45,7 @@ class Queue<T> {
         return result
     }
 
-    addLevelListener(level: number, front: number, listener: () => any) {
+    addLevelListener(level: number, front: number, listener: () => any): ListenerSubscription {
         let list: Map<Number, QueueListener[]> = null
         if (front < 0)
             list = this.listenersDown
@@ -54,6 +58,14 @@ class Queue<T> {
             list.get(level).push(listener)
         else
             list.set(level, [listener])
+
+        return {
+            forget: () => list.set(level, list.get(level).filter(l => l != listener))
+        }
+    }
+
+    empty() {
+        return !this.queue.length
     }
 }
 
@@ -82,37 +94,38 @@ async function run() {
     q.pop()
     q.pop()*/
 
-    let loopOn = false
-
     let startLoop = async () => {
-        if (loopOn) {
-            console.error(`STARTED ALREADY`)
-            return
-        }
+        while (true) {
+            console.log(`LOOP wait for something`)
+            await waitForSomethingAvailable()
 
-        loopOn = true
-        while (loopOn) {
             let data = await q.pop()
-            console.log(`receive data from queue`)
+            if (!data) {
+                console.log(`LOOP end`)
+                return
+            }
 
-            console.log(`processing data ...`)
+            console.log(`LOOP receive data from queue ${data}`)
+
+            console.log(`LOOP processing data ...`)
             await TestTools.wait(1000)
-            console.log(`processing done.`)
+            console.log(`LOOP processing done.`)
         }
     }
 
-    // queue begins to receive items => start read loop
-    q.addLevelListener(1, 1, async () => {
-        console.log(`start reading`)
+    let waitForSomethingAvailable = (): Promise<void> => {
+        if (!q.empty())
+            return Promise.resolve()
 
-        startLoop()
-    })
+        return new Promise(resolve => {
+            let l = q.addLevelListener(1, 1, async () => {
+                l.forget()
+                resolve()
+            })
+        })
+    }
 
-    // queue has no more items => end read loop
-    q.addLevelListener(0, -1, async () => {
-        console.log(`end reading, no more items`)
-        loopOn = false
-    })
+    startLoop()
 
     // queue has too much items => pause inputs
     q.addLevelListener(10, 1, async () => {
