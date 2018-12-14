@@ -116,31 +116,29 @@ async function run() {
 
     // queue has too much items => pause inputs
     q.addLevelListener(10, 1, async () => {
-        console.log(`pause reading`)
-        loopOn = false
+        console.log(`pause inputs`)
+        inputStream.pause()
     })
 
     // queue has low items => resume inputs
     q.addLevelListener(5, -1, async () => {
         console.log(`resume reading`)
-        loopOn = false
+        inputStream.resume()
     })
 
-    let inputStream = fs.createReadStream('yarn.lock', {
+    let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
         autoClose: true,
         encoding: 'utf8'
     })
 
     inputStream.on('data', chunk => {
-        console.log(`data`)
+        console.log(`stream data`)
         q.push(chunk)
     }).on('end', () => {
-        console.log(`end`)
+        console.log(`stream end`)
     }).on('error', (err) => {
-        console.log(`error ${err}`)
+        console.log(`stream error ${err}`)
     })
-    //inputStream.pause()
-    //inputStream.resume()
 }
 
 run()
