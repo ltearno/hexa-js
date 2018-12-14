@@ -1,5 +1,6 @@
 import fs = require('fs')
 import * as TestTools from './test-tools'
+import { Readable } from 'stream';
 
 console.log(`hello world`)
 
@@ -69,89 +70,93 @@ class Queue<T> {
     }
 }
 
-class Pipe {
+class QueueToConsumerPipe {
+    constructor(private q: Queue<any>, private consumer: (data: any) => Promise<void>) { }
 
-}
+    start() {
+        this.readLoop()
+    }
 
-async function run() {
-    let q = new Queue<string>()
-
-    /*q.addLevelListener(3, 1, () => console.log(`level 3 up reached`))
-    q.addLevelListener(4, 1, () => console.log(`level 4 up reached`))
-    q.addLevelListener(4, -1, () => console.log(`level 4 down reached`))
-    q.addLevelListener(2, 0, () => console.log(`level 2 reached`))
-
-    q.push("titi1")
-    q.push("titi2")
-    q.push("titi3")
-    q.push("titi4")
-    q.push("titi5")
-    q.push("titi6")
-    q.pop()
-    q.pop()
-    q.pop()
-    q.pop()
-    q.pop()
-    q.pop()*/
-
-    let startLoop = async () => {
+    private async readLoop() {
         while (true) {
             console.log(`LOOP wait for something`)
-            await waitForSomethingAvailable()
+            await this.waitForSomethingAvailable()
 
-            let data = await q.pop()
+            let data = await this.q.pop()
+
+            console.log(`LOOP processing data ...`)
+            await this.consumer(data)
+            console.log(`LOOP processing done.`)
+
             if (!data) {
                 console.log(`LOOP end`)
                 return
             }
-
-            console.log(`LOOP receive data from queue ${data}`)
-
-            console.log(`LOOP processing data ...`)
-            await TestTools.wait(1000)
-            console.log(`LOOP processing done.`)
         }
     }
 
-    let waitForSomethingAvailable = (): Promise<void> => {
-        if (!q.empty())
+    private waitForSomethingAvailable(): Promise<void> {
+        if (!this.q.empty())
             return Promise.resolve()
 
         return new Promise(resolve => {
-            let l = q.addLevelListener(1, 1, async () => {
+            let l = this.q.addLevelListener(1, 1, async () => {
                 l.forget()
                 resolve()
             })
         })
     }
+}
 
-    startLoop()
+class StreamToQueuePipe {
+    constructor(private s: Readable, private q: Queue<any>, high: number = 10, low: number = 5) {
+        // queue has too much items => pause inputs
+        q.addLevelListener(high, 1, async () => {
+            console.log(`pause inputs`)
+            s.pause()
+        })
 
-    // queue has too much items => pause inputs
-    q.addLevelListener(10, 1, async () => {
-        console.log(`pause inputs`)
-        inputStream.pause()
-    })
+        // queue has low items => resume inputs
+        q.addLevelListener(low, -1, async () => {
+            console.log(`resume reading`)
+            s.resume()
+        })
+    }
 
-    // queue has low items => resume inputs
-    q.addLevelListener(5, -1, async () => {
-        console.log(`resume reading`)
-        inputStream.resume()
-    })
+    start() {
+        this.s.on('data', chunk => {
+            console.log(`stream data`)
+            this.q.push(chunk)
+        }).on('end', () => {
+            console.log(`stream end`)
+        }).on('error', (err) => {
+            console.log(`stream error ${err}`)
+        })
+    }
+}
 
+async function run() {
     let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
         autoClose: true,
         encoding: 'utf8'
     })
 
-    inputStream.on('data', chunk => {
-        console.log(`stream data`)
-        q.push(chunk)
-    }).on('end', () => {
-        console.log(`stream end`)
-    }).on('error', (err) => {
-        console.log(`stream error ${err}`)
-    })
+    let q = new Queue<string>()
+
+    let s2q = new StreamToQueuePipe(inputStream, q)
+
+    s2q.start()
+
+    setTimeout(() => {
+        console.log(`start receiving !`)
+
+        let p = new QueueToConsumerPipe(q, async data => {
+            console.log(`received data !!!`)
+            await TestTools.wait(700)
+        })
+        p.start()
+
+    }, 5000)
 }
 
 run()
