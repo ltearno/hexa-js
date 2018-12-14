@@ -53,3 +53,27 @@ class Queue<T> {
             list.set(level, [listener])
     }
 }
+
+async function run() {
+    let q = new Queue<string>()
+
+    q.addLevelListener(3, 1, () => console.log(`level 3 up reached`))
+    q.addLevelListener(4, 1, () => console.log(`level 4 up reached`))
+    q.addLevelListener(4, -1, () => console.log(`level 4 down reached`))
+    q.addLevelListener(2, 0, () => console.log(`level 2 reached`))
+
+    q.push("titi1")
+    q.push("titi2")
+    q.push("titi3")
+    q.push("titi4")
+    q.push("titi5")
+    q.push("titi6")
+    q.pop()
+    q.pop()
+    q.pop()
+    q.pop()
+    q.pop()
+    q.pop()
+}
+
+run()
