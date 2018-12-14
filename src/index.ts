@@ -46,6 +46,10 @@ class Queue<T> {
         return result
     }
 
+    empty() {
+        return !this.queue.length
+    }
+
     addLevelListener(level: number, front: number, listener: () => any): ListenerSubscription {
         let list: Map<Number, QueueListener[]> = null
         if (front < 0)
@@ -63,10 +67,6 @@ class Queue<T> {
         return {
             forget: () => list.set(level, list.get(level).filter(l => l != listener))
         }
-    }
-
-    empty() {
-        return !this.queue.length
     }
 }
 
@@ -141,16 +141,20 @@ async function run() {
         encoding: 'utf8'
     })
 
-    let q = new Queue<string>()
+    let q1 = new Queue<string>()
 
-    let s2q = new StreamToQueuePipe(inputStream, q)
+    let q2 = new Queue<string>()
 
-    s2q.start()
+    let s2q1 = new StreamToQueuePipe(inputStream, q1, 100, 20)
+    let q1q2 = new QueueToQueuePipe(q1, q2, 5, 1)
+
+    s2q1.start()
+    q1q2.start()
 
     setTimeout(() => {
-        console.log(`start receiving !`)
+        console.log(`start receiving from q2!`)
 
-        let p = new QueueToConsumerPipe(q, async data => {
+        let p = new QueueToConsumerPipe(q2, async data => {
             console.log(`received data !!!`)
             await TestTools.wait(700)
         })
