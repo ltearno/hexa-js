@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { Queue } from './queue/queue'
+import { Queue, waitForSomethingAvailable } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToQueuePipe } from './queue/pipe-queue-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
@@ -7,7 +7,14 @@ import * as TestTools from './test-tools'
 
 import * as Tools from './tools'
 import * as NetworkApi from './network-api-node-impl'
-import { resolve } from 'dns';
+import * as Serialisation from './serialisation'
+
+function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+    })
+}
 
 /*
 
@@ -53,10 +60,8 @@ async function oldrun() {
 }
 
 async function run() {
-    let rpcQueue = new Queue<string>('rpc')
-
     let app = Tools.createExpressApp(8080)
-    app.ws('/queue', (ws, req) => {
+    app.ws('/queue', async (ws, req) => {
         console.log(`opened ws`)
 
         ws.on('error', err => {
@@ -66,51 +71,66 @@ async function run() {
 
         ws.on('close', () => {
             console.log(`closed ws`)
-            console.log(`FINISHED RECEIVING`)
         })
+
+        let rcvQ = new Queue<Buffer>('rcv')
 
         ws.on('message', async (message) => {
-            console.log(`received ws message`)
-            await rpcQueue.pop()
+            rcvQ.push(message)
         })
 
-        ws.send('hello')
+        while (true) {
+            if (rcvQ.isFinished()) {
+                console.log(`FINISHED RECEIVING`)
+                break
+            }
+            await waitForSomethingAvailable(rcvQ)
+            let value = await rcvQ.pop()
+            console.log(`proc begin ${JSON.stringify(Serialisation.deserialize(value))}`)
+            //await TestTools.wait(200)
+            console.log(`proc end`)
+            ws.send('lk')
+        }
     })
 
     let network = new NetworkApi.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:8080/queue')
+    let sendRpcQueue = new Queue<string>('rpc')
     ws.on('open', () => {
         console.log('opened ws client, go !')
 
         let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
-            autoClose: true,
-            encoding: 'utf8'
+            flags: 'r',
+            encoding: null,
+            start: 0,
+            autoClose: true
         })
 
-        let q1 = new Queue<string>('q1')
-        let s2q1 = new StreamToQueuePipe(inputStream, q1, 10, 2)
+        let q1 = new Queue<Buffer>('q1')
+        let s2q1 = new StreamToQueuePipe(inputStream, q1, 5, 1)
         s2q1.start()
 
         let p = new QueueToConsumerPipe(q1, async data => {
-            if (rpcQueue.size() > 5) {
+            if (sendRpcQueue.size() > 5) {
                 // wait until only 2
                 await new Promise(resolve => {
-                    rpcQueue.addLevelListener(2, -1, async () => {
+                    sendRpcQueue.addLevelListener(2, -1, async () => {
                         resolve()
                     })
                 })
             }
 
-            rpcQueue.push('o')
-            ws.send(data)
+            sendRpcQueue.push('o')
+            ws.send(Serialisation.serialize([data]))
         }, () => {
             console.log(`FINISHED SENDING`)
-            ws.close()
+            sendRpcQueue.finish()
         })
         p.start()
     })
-    ws.on('message', () => {
-        console.log('message ws client')
+    ws.on('message', async () => {
+        //console.log('message ws client')
+        await sendRpcQueue.pop()
     })
     ws.on('close', () => console.log('close ws client'))
     ws.on('error', () => console.log('error ws client'))

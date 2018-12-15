@@ -1,6 +1,6 @@
 export interface WebSocket {
     on(eventType: string, listener: (data: any) => any)
-    send(data: string)
+    send(data: string | Buffer)
     close()
 }
 
