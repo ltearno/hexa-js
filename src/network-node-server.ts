@@ -1,15 +1,9 @@
-import * as Block from './block'
-import * as NodeApi from './node-api'
-import * as NodeImpl from './node-impl'
-import * as NodeTransfer from './node-transfer'
-import * as TestTools from '../test-tools'
-import * as NetworkApi from '../network-api'
-import * as WebSocketConnector from './websocket-connector'
+import * as TestTools from './test-tools'
+import * as NetworkApi from './network-api'
 import * as express from 'express'
 import * as bodyParser from 'body-parser'
 import * as WebSocket from 'ws'
 import * as Request from 'request'
-import { MinerApi, MinerImpl } from '..';
 
 declare function ws(this: express.Server, url: string, callback: any)
 
@@ -19,14 +13,8 @@ declare module "express" {
     }
 }
 
-export class NodeServer {
-    private miner: MinerApi.MinerApi
-
-    constructor(
-        private node: NodeApi.NodeApi,
-        private newPeersReceiver: (peer: NodeApi.NodeApi) => void,
-        private closedPeersReceiver: (peer: NodeApi.NodeApi) => void) {
-        this.miner = new MinerImpl.MinerImpl(node)
+export class Server {
+    constructor() {
     }
 
     nbEventsWebSockets = 0

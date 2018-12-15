@@ -5,6 +5,20 @@ import { QueueToQueuePipe } from './queue/pipe-queue-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 import * as TestTools from './test-tools'
 
+import * as Tools from './tools'
+import * as NetworkApi from './network-api-node-impl'
+
+/*
+
+queues :
+- list dirs & files => request sha & wait return
+- pour chaque wait return, si envoi nécessaire, enfiler l'info de fichier+offset
+- sha buffers queue (from {file,offset} queue, have always X buffers ready to send on the wire)
+- rpc calls (prioritaires ?) : ouvrir tx, attendre que les queues soient vides, et valider tx puis quitter
+
+
+*/
+
 async function run() {
     let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
         autoClose: true,
@@ -22,6 +36,31 @@ async function run() {
     s2q1.start()
     q1q2.start()
     q2q3.start()
+
+    let app = Tools.createExpressApp(8080)
+    app.ws('/queue', (ws, req) => {
+        console.log(`opened ws`)
+
+        ws.on('error', err => {
+            console.log(`error on ws ${err}`)
+            ws.close()
+        })
+
+        ws.on('close', () => {
+            console.log(`closed ws`)
+        })
+
+        ws.send('hello')
+    })
+
+    let network = new NetworkApi.NetworkApiNodeImpl()
+    let ws = network.createClientWebSocket('ws://localhost:8080/queue')
+    ws.on('open', () => console.log('opened ws client'))
+    ws.on('message', () => {
+        console.log('message ws client')
+    })
+    ws.on('close', () => console.log('close ws client'))
+    ws.on('error', () => console.log('error ws client'))
 
     setTimeout(() => {
         console.log(`start receiving from q3`)
