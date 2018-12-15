@@ -1,10 +1,10 @@
-import { Queue, waitForSomethingAvailable } from './queue'
+import { QueueRead, QueueWrite, QueueMng, waitForSomethingAvailable } from './queue'
 
 export class QueueToQueuePipe {
     private pauseFinisher: () => any = null
     private resumePromise: Promise<void> = null
 
-    constructor(private s: Queue<any>, private q: Queue<any>, high: number, low: number) {
+    constructor(private s: QueueRead<any> & QueueMng, private q: QueueWrite<any> & QueueMng, high: number, low: number) {
         if (high <= low) {
             console.error(`high <= low !!!`)
             return

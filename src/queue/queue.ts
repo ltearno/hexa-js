@@ -12,7 +12,26 @@ export interface ListenerSubscription {
     forget()
 }
 
-export class Queue<T> {
+export interface QueueMng {
+    name: string
+    addLevelListener(level: number, front: number, listener: QueueListener): ListenerSubscription
+    empty(): boolean
+}
+
+export interface QueueRead<T> {
+    name?: string
+    isFinished(): boolean
+    pop(): Promise<T>
+}
+
+export interface QueueWrite<T> {
+    name?: string
+    push(data: T): Promise<boolean>
+    finish()
+    size(): number
+}
+
+export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     private queue: QueueItem<T>[] = []
     private listenersUp: Map<number, QueueListener[]> = new Map()
     private listenersDown: Map<number, QueueListener[]> = new Map()
@@ -109,7 +128,7 @@ export class Queue<T> {
     }
 }
 
-export async function waitForSomethingAvailable(q: Queue<any>): Promise<void> {
+export async function waitForSomethingAvailable(q: QueueMng): Promise<void> {
     if (!q.empty())
         return
 

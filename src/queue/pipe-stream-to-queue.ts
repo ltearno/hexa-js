@@ -1,8 +1,8 @@
 import { Readable } from 'stream'
-import { Queue } from './queue'
+import { QueueWrite, QueueMng } from './queue'
 
-export class StreamToQueuePipe {
-    constructor(private s: Readable, private q: Queue<any>, high: number = 10, low: number = 5) {
+export class StreamToQueuePipe<T> {
+    constructor(private s: Readable, private q: QueueWrite<T> & QueueMng, high: number = 10, low: number = 5) {
         // queue has too much items => pause inputs
         q.addLevelListener(high, 1, async () => {
             //console.log(`pause inputs`)
@@ -20,7 +20,7 @@ export class StreamToQueuePipe {
         let c = 1
         this.s.on('data', chunk => {
             console.log(`stream data rx ${c}`)
-            this.q.push(chunk)
+            this.q.push((chunk as any) as T)
         }).on('end', () => {
             console.log(`stream end`)
             this.q.finish()

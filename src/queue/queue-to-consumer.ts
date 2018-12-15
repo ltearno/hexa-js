@@ -1,7 +1,11 @@
-import { Queue, waitForSomethingAvailable } from './queue'
+import { QueueRead, QueueMng, waitForSomethingAvailable } from './queue'
 
-export class QueueToConsumerPipe {
-    constructor(private q: Queue<any>, private consumer: (data: any) => Promise<void>, private finish: () => void) { }
+export class QueueToConsumerPipe<T> {
+    constructor(
+        private q: QueueRead<T> & QueueMng,
+        private consumer: (data: T) => Promise<void>,
+        private finish: () => void) {
+    }
 
     start() {
         this.readLoop()
