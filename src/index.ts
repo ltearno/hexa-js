@@ -1,11 +1,12 @@
 import * as fs from 'fs'
-import { Queue, waitForSomethingAvailable } from './queue/queue'
+import { Queue, waitForSomethingAvailable, QueueRead } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
 import * as Tools from './tools'
 import * as TestTools from './test-tools'
-import * as NetworkApi from './network-api-node-impl'
+import * as NetworkApi from './network-api'
+import * as NetworkApiImpl from './network-api-node-impl'
 import * as Serialisation from './serialisation'
 
 /*
@@ -18,10 +19,26 @@ queues :
 
 */
 
+async function processMessage(buffer: Buffer, dataProcessor: (data: any[]) => Promise<void>, ws: NetworkApi.WebSocket, sendRpcQueue: QueueRead<any>) {
+    let list = Serialisation.deserialize(buffer)
+    let messageId = list.shift()
+    if (messageId == 0) {
+        // it's an ack
+        console.log(`receive ack for ${messageId}`)
+        await sendRpcQueue.pop()
+    }
+    else {
+        await dataProcessor(list)
+        ws.send(Serialisation.serialize([0, messageId]))
+    }
+}
+
 function server() {
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', async (ws, req) => {
         console.log(`opened ws`)
+
+        let sendRpcQueue = new Queue<string>('rpc')
 
         ws.on('error', err => {
             console.log(`error on ws ${err}`)
@@ -30,10 +47,10 @@ function server() {
 
         ws.on('close', () => {
             console.log(`closed ws`)
+            rcvQ.finish()
         })
 
         let rcvQ = new Queue<Buffer>('rcv')
-
         ws.on('message', async (message) => {
             rcvQ.push(message)
         })
@@ -43,32 +60,25 @@ function server() {
                 console.log(`FINISHED RECEIVING`)
                 break
             }
+
             await waitForSomethingAvailable(rcvQ)
-            let raw = await rcvQ.pop()
-            let [messageId, data] = Serialisation.deserialize(raw)
-            console.log(`proc begin ${messageId}`)
-            //await TestTools.wait(200)
-            console.log(`proc end`)
-            ws.send(Serialisation.serialize([0, messageId]))
+
+            let buffer = await rcvQ.pop()
+            await processMessage(buffer, async data => {
+                console.log(`DATA RCV`)
+            }, ws, sendRpcQueue)
         }
     })
 }
-
-// message:
-// [id,rq_ack(0|1|2),...body]
-// rq_ack : 
-// - 0 : no ack required
-// - 1 : ack required
-// - 2 : ack message
 
 let nextMessageIdBase = TestTools.uuidv4()
 let nextMessageId = 1
 
 function client() {
-    let network = new NetworkApi.NetworkApiNodeImpl()
+    let network = new NetworkApiImpl.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:8080/queue')
     let sendRpcQueue = new Queue<string>('rpc')
-    ws.on('open', () => {
+    ws.on('open', async () => {
         console.log('opened ws client, go !')
 
         let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
@@ -100,11 +110,26 @@ function client() {
             sendRpcQueue.finish()
         })
         p.start()
-    })
-    ws.on('message', async (raw) => {
-        let [shouldBeZero, messageId] = Serialisation.deserialize(raw)
-        console.log(`receive ack for ${messageId} (${shouldBeZero})`)
-        await sendRpcQueue.pop()
+
+
+        let rcvQ = new Queue<Buffer>('rcv')
+        ws.on('message', async (message) => {
+            rcvQ.push(message)
+        })
+
+        while (true) {
+            if (rcvQ.isFinished()) {
+                console.log(`FINISHED CLIENT RECEIVING`)
+                break
+            }
+
+            await waitForSomethingAvailable(rcvQ)
+
+            let buffer = await rcvQ.pop()
+            await processMessage(buffer, async data => {
+                console.log(`CLIENT DATA RCV`)
+            }, ws, sendRpcQueue)
+        }
     })
     ws.on('close', () => console.log('close ws client'))
     ws.on('error', () => console.log('error ws client'))
