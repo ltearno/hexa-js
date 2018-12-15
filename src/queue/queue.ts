@@ -37,6 +37,10 @@ export class Queue<T> {
         return this.finished
     }
 
+    size() {
+        return this.queue.length
+    }
+
     async push(data: T): Promise<boolean> {
         this.queue.push({ data })
 

@@ -7,6 +7,7 @@ import * as TestTools from './test-tools'
 
 import * as Tools from './tools'
 import * as NetworkApi from './network-api-node-impl'
+import { resolve } from 'dns';
 
 /*
 
@@ -52,6 +53,8 @@ async function oldrun() {
 }
 
 async function run() {
+    let rpcQueue = new Queue<string>('rpc')
+
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', (ws, req) => {
         console.log(`opened ws`)
@@ -63,10 +66,12 @@ async function run() {
 
         ws.on('close', () => {
             console.log(`closed ws`)
+            console.log(`FINISHED RECEIVING`)
         })
 
-        ws.on('message', (message) => {
+        ws.on('message', async (message) => {
             console.log(`received ws message`)
+            await rpcQueue.pop()
         })
 
         ws.send('hello')
@@ -87,10 +92,19 @@ async function run() {
         s2q1.start()
 
         let p = new QueueToConsumerPipe(q1, async data => {
+            if (rpcQueue.size() > 5) {
+                // wait until only 2
+                await new Promise(resolve => {
+                    rpcQueue.addLevelListener(2, -1, async () => {
+                        resolve()
+                    })
+                })
+            }
+
+            rpcQueue.push('o')
             ws.send(data)
-            //await TestTools.wait(100)
         }, () => {
-            console.log(`FINISHED RECEIVED`)
+            console.log(`FINISHED SENDING`)
             ws.close()
         })
         p.start()
