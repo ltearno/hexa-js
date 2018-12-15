@@ -19,7 +19,7 @@ queues :
 
 */
 
-async function run() {
+async function oldrun() {
     let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
         autoClose: true,
         encoding: 'utf8'
@@ -37,6 +37,21 @@ async function run() {
     q1q2.start()
     q2q3.start()
 
+    setTimeout(() => {
+        console.log(`start receiving from q3`)
+
+        let p = new QueueToConsumerPipe(q3, async data => {
+            console.log(`received data `)
+            await TestTools.wait(70)
+        }, () => {
+            console.log(`FINISHED RECEIVED`)
+        })
+        p.start()
+
+    }, 2500)
+}
+
+async function run() {
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', (ws, req) => {
         console.log(`opened ws`)
@@ -50,30 +65,41 @@ async function run() {
             console.log(`closed ws`)
         })
 
+        ws.on('message', (message) => {
+            console.log(`received ws message`)
+        })
+
         ws.send('hello')
     })
 
     let network = new NetworkApi.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:8080/queue')
-    ws.on('open', () => console.log('opened ws client'))
+    ws.on('open', () => {
+        console.log('opened ws client, go !')
+
+        let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
+            autoClose: true,
+            encoding: 'utf8'
+        })
+
+        let q1 = new Queue<string>('q1')
+        let s2q1 = new StreamToQueuePipe(inputStream, q1, 10, 2)
+        s2q1.start()
+
+        let p = new QueueToConsumerPipe(q1, async data => {
+            ws.send(data)
+            //await TestTools.wait(100)
+        }, () => {
+            console.log(`FINISHED RECEIVED`)
+            ws.close()
+        })
+        p.start()
+    })
     ws.on('message', () => {
         console.log('message ws client')
     })
     ws.on('close', () => console.log('close ws client'))
     ws.on('error', () => console.log('error ws client'))
-
-    setTimeout(() => {
-        console.log(`start receiving from q3`)
-
-        let p = new QueueToConsumerPipe(q3, async data => {
-            console.log(`received data ${data}`)
-            await TestTools.wait(70)
-        }, () => {
-            console.log(`FINISHED RECEIVED`)
-        })
-        p.start()
-
-    }, 2500)
 }
 
 run()
