@@ -9,43 +9,7 @@
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceFolder}/dist/blockchain-node.js",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Test kvstorage",
-            "program": "${workspaceFolder}/dist/test/test-key-value-storage.js",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Test smart",
-            "program": "${workspaceFolder}/dist/test/test-smart-contracts.js",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Test sequence storage",
-            "program": "${workspaceFolder}/dist/test/test-sequence-storage.js",
-            "outFiles": [
-                "${workspaceFolder}/**/*.js"
-            ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Test crypto",
-            "program": "${workspaceFolder}/dist/test/test-crypto.js",
+            "program": "${workspaceFolder}/dist/index.js",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ]
