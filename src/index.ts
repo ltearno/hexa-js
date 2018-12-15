@@ -4,6 +4,7 @@ import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
 import * as Tools from './tools'
+import * as TestTools from './test-tools'
 import * as NetworkApi from './network-api-node-impl'
 import * as Serialisation from './serialisation'
 
@@ -14,7 +15,6 @@ queues :
 - pour chaque wait return, si envoi nécessaire, enfiler l'info de fichier+offset
 - sha buffers queue (from {file,offset} queue, have always X buffers ready to send on the wire)
 - rpc calls (prioritaires ?) : ouvrir tx, attendre que les queues soient vides, et valider tx puis quitter
-
 
 */
 
@@ -45,14 +45,24 @@ function server() {
             }
             await waitForSomethingAvailable(rcvQ)
             let raw = await rcvQ.pop()
-            let value = Serialisation.deserialize(raw)
-            console.log(`proc begin ${value.length}`)
+            let [messageId, data] = Serialisation.deserialize(raw)
+            console.log(`proc begin ${messageId}`)
             //await TestTools.wait(200)
             console.log(`proc end`)
-            ws.send('lk')
+            ws.send(Serialisation.serialize([0, messageId]))
         }
     })
 }
+
+// message:
+// [id,rq_ack(0|1|2),...body]
+// rq_ack : 
+// - 0 : no ack required
+// - 1 : ack required
+// - 2 : ack message
+
+let nextMessageIdBase = TestTools.uuidv4()
+let nextMessageId = 1
 
 function client() {
     let network = new NetworkApi.NetworkApiNodeImpl()
@@ -82,16 +92,18 @@ function client() {
                 })
             }
 
-            sendRpcQueue.push('o')
-            ws.send(Serialisation.serialize([data]))
+            let messageId = nextMessageIdBase + (nextMessageId++)
+            sendRpcQueue.push(messageId)
+            ws.send(Serialisation.serialize([messageId, data]))
         }, () => {
             console.log(`FINISHED SENDING`)
             sendRpcQueue.finish()
         })
         p.start()
     })
-    ws.on('message', async () => {
-        //console.log('message ws client')
+    ws.on('message', async (raw) => {
+        let [shouldBeZero, messageId] = Serialisation.deserialize(raw)
+        console.log(`receive ack for ${messageId} (${shouldBeZero})`)
         await sendRpcQueue.pop()
     })
     ws.on('close', () => console.log('close ws client'))
