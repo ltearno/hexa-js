@@ -18,7 +18,7 @@ queues :
 
 */
 
-async function run() {
+function server() {
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', async (ws, req) => {
         console.log(`opened ws`)
@@ -44,14 +44,17 @@ async function run() {
                 break
             }
             await waitForSomethingAvailable(rcvQ)
-            let value = await rcvQ.pop()
-            console.log(`proc begin ${JSON.stringify(Serialisation.deserialize(value))}`)
+            let raw = await rcvQ.pop()
+            let value = Serialisation.deserialize(raw)
+            console.log(`proc begin ${value.length}`)
             //await TestTools.wait(200)
             console.log(`proc end`)
             ws.send('lk')
         }
     })
+}
 
+function client() {
     let network = new NetworkApi.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:8080/queue')
     let sendRpcQueue = new Queue<string>('rpc')
@@ -93,6 +96,11 @@ async function run() {
     })
     ws.on('close', () => console.log('close ws client'))
     ws.on('error', () => console.log('error ws client'))
+}
+
+async function run() {
+    server()
+    client()
 }
 
 run()
