@@ -1,10 +1,10 @@
 import { QueueRead, QueueWrite, QueueMng, waitForSomethingAvailable } from './queue'
 
-export class QueueToQueuePipe {
+export class QueueToQueuePipe<Source, Destination> {
     private pauseFinisher: () => any = null
     private resumePromise: Promise<void> = null
 
-    constructor(private s: QueueRead<any> & QueueMng, private q: QueueWrite<any> & QueueMng, high: number, low: number) {
+    constructor(private s: QueueRead<Source> & QueueMng, private q: QueueWrite<Destination> & QueueMng, high: number, low: number) {
         if (high <= low) {
             console.error(`high <= low !!!`)
             return
@@ -33,6 +33,8 @@ export class QueueToQueuePipe {
         })
     }
 
+    transform: (dataIn: Source) => Promise<Destination> = null
+
     async start() {
         while (true) {
             // if paused, wait for unpause
@@ -44,7 +46,14 @@ export class QueueToQueuePipe {
             console.log(`q2q ${this.s.name}->${this.q.name} wait data`)
             await waitForSomethingAvailable(this.s)
 
-            let data = await this.s.pop()
+            // sometimes types are transformed, sometimes not
+            // TODO express that with the TS type system
+            let data: any = await this.s.pop()
+
+            if (this.transform) {
+                console.log(`q2q ${this.s.name}->${this.q.name} transform`)
+                data = await this.transform(data)
+            }
 
             console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
             await this.q.push(data)
