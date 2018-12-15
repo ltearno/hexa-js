@@ -19,8 +19,17 @@ class Queue<T> {
     private listenersUp: Map<number, QueueListener[]> = new Map()
     private listenersDown: Map<number, QueueListener[]> = new Map()
     private listenersLevel: Map<number, QueueListener[]> = new Map()
+    private finished: boolean = false
 
     constructor(public name: string) { }
+
+    finish() {
+        this.finished = true
+    }
+
+    isFinished() {
+        return this.finished
+    }
 
     async push(data: T): Promise<boolean> {
         this.queue.push({ data })
@@ -103,7 +112,7 @@ async function waitForSomethingAvailable(q: Queue<any>): Promise<void> {
 }
 
 class QueueToConsumerPipe {
-    constructor(private q: Queue<any>, private consumer: (data: any) => Promise<void>) { }
+    constructor(private q: Queue<any>, private consumer: (data: any) => Promise<void>, private finish: () => void) { }
 
     start() {
         this.readLoop()
@@ -120,8 +129,9 @@ class QueueToConsumerPipe {
             await this.consumer(data)
             //console.log(`LOOP processing done on ${this.q.name}.`)
 
-            if (!data) {
+            if (this.q.isFinished()) {
                 console.log(`q2c end on ${this.q.name}`)
+                this.finish()
                 return
             }
         }
@@ -146,11 +156,12 @@ class StreamToQueuePipe {
     start() {
         let c = 1
         this.s.on('data', chunk => {
-            console.log(`stream data rx`)
+            console.log(`stream data rx ${c}`)
             //this.q.push(chunk)
             this.q.push(c++)
         }).on('end', () => {
             console.log(`stream end`)
+            this.q.finish()
         }).on('error', (err) => {
             console.log(`stream error ${err}`)
         })
@@ -178,14 +189,14 @@ class QueueToQueuePipe {
 
         // queue has low items => resume inputs
         q.addLevelListener(low, -1, async () => {
-            console.log(`q2q ${this.s.name}->${this.q.name} unpause`)
-            let pauseFinisher = this.pauseFinisher
-            this.pauseFinisher = null
-            this.resumePromise = null
-            if (pauseFinisher)
-                pauseFinisher()
-            else
-                console.warn(`q2q ${this.s.name}->${this.q.name} weird no finisher for pause`)
+            if (this.pauseFinisher) {
+                console.log(`q2q ${this.s.name}->${this.q.name} unpause`)
+                let pauseFinisher = this.pauseFinisher
+                this.pauseFinisher = null
+                this.resumePromise = null
+                if (pauseFinisher)
+                    pauseFinisher()
+            }
 
         })
     }
@@ -206,8 +217,9 @@ class QueueToQueuePipe {
             console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
             await this.q.push(data)
 
-            if (!data) {
+            if (this.s.isFinished()) {
                 console.log(`q2q ${this.s.name}->${this.q.name} end of job !`)
+                this.q.finish()
                 return
             }
         }
@@ -238,6 +250,8 @@ async function run() {
         let p = new QueueToConsumerPipe(q3, async data => {
             console.log(`received data ${data}`)
             await TestTools.wait(70)
+        }, () => {
+            console.log(`FINISHED RECEIVED`)
         })
         p.start()
 
