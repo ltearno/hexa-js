@@ -18,13 +18,12 @@ export interface QueueMng {
     empty(): boolean
 }
 
-export interface Popper<T> {
-    pop(): Promise<T>
-}
+export type Popper<T> = () => Promise<T>
 
-export interface QueueRead<T> extends Popper<T> {
+export interface QueueRead<T> {
     name?: string
     isFinished(): boolean
+    pop: Popper<T>
 }
 
 export interface QueueWrite<T> {
@@ -131,7 +130,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 }
 
-export async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
+async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
     if (q.empty()) {
         await new Promise(resolve => {
             let l = q.addLevelListener(1, 1, async () => {
@@ -145,10 +144,8 @@ export async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): 
 }
 
 export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
-    return {
-        pop: async () => {
-            return await waitForSomethingAvailable(q)
-        }
+    return async () => {
+        return await waitForSomethingAvailable(q)
     }
 }
 

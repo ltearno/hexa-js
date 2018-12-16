@@ -1,4 +1,4 @@
-import { QueueRead, QueueMng, waitForSomethingAvailable } from './queue'
+import { QueueRead, QueueMng, waitPopper } from './queue'
 
 const IS_DEBUG = false
 
@@ -14,9 +14,10 @@ export class QueueToConsumerPipe<T> {
     }
 
     private async readLoop() {
+        let popper = waitPopper(this.q)
         while (true) {
             IS_DEBUG && console.log(`q2c wait for ${this.q.name}`)
-            let data = await waitForSomethingAvailable(this.q)
+            let data = await popper()
 
             //console.log(`q2c processing data on ${this.q.name} ...`)
             await this.consumer(data)

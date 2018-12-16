@@ -1,4 +1,4 @@
-import { QueueRead, QueueWrite, QueueMng, waitForSomethingAvailable } from './queue'
+import { QueueRead, QueueWrite, QueueMng, waitPopper } from './queue'
 
 const IS_DEBUG = false
 
@@ -37,6 +37,7 @@ export class QueueToQueuePipe<T> {
 
     async start() {
         while (true) {
+            let popper = waitPopper(this.s)
             // if paused, wait for unpause
             if (this.resumePromise) {
                 IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} wait unpause`)
@@ -44,7 +45,7 @@ export class QueueToQueuePipe<T> {
             }
 
             IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} wait data`)
-            let data: any = await waitForSomethingAvailable(this.s)
+            let data: any = await popper()
 
             IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
             await this.q.push(data)

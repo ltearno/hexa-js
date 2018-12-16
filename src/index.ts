@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { Queue, waitAndPush, waitForSomethingAvailable, QueueRead } from './queue/queue'
+import { Queue, waitAndPush, waitPopper, QueueRead } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
@@ -56,13 +56,15 @@ function server() {
             rcvQ.push(message)
         })
 
+        let popper = waitPopper(rcvQ)
+
         while (true) {
             if (rcvQ.isFinished()) {
                 console.log(`FINISHED RECEIVING`)
                 break
             }
 
-            let buffer = await waitForSomethingAvailable(rcvQ)
+            let buffer = await popper()
             await processMessage(buffer, async (data: any) => {
                 //console.log(`DATA RCV ${JSON.stringify(data)}`)
                 console.log(`${data[0].name}`)
@@ -99,11 +101,12 @@ function client() {
         let askShaStatus = new Queue<DirectoryLister.FileIteration>('ask-sha-status');
 
         (async () => {
+            let popper = waitPopper(fileInfos)
             while (true) {
                 if (fileInfos.isFinished())
                     break
 
-                let fileInfo = await waitForSomethingAvailable(fileInfos)
+                let fileInfo = await popper()
 
                 let send1 = waitAndPush(waitedShas, fileInfo, 50, 8)
                 let send2 = waitAndPush(askShaStatus, fileInfo, 50, 8)
@@ -130,12 +133,14 @@ function client() {
         })
 
         while (true) {
+            let popper = waitPopper(rcvQ)
             if (rcvQ.isFinished()) {
                 console.log(`FINISHED CLIENT RECEIVING`)
                 break
             }
 
-            let buffer = await waitForSomethingAvailable(rcvQ)
+            waitedShas.pop()
+            let buffer = await popper()
             await processMessage(buffer, async data => {
                 console.log(`CLIENT DATA RCV`)
             }, ws, sendRpcQueue)
