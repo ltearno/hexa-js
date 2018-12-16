@@ -62,9 +62,7 @@ function server() {
                 break
             }
 
-            await waitForSomethingAvailable(rcvQ)
-
-            let buffer = await rcvQ.pop()
+            let buffer = await waitForSomethingAvailable(rcvQ)
             await processMessage(buffer, async (data: any) => {
                 //console.log(`DATA RCV ${JSON.stringify(data)}`)
                 console.log(`${data[0].name}`)
@@ -105,9 +103,7 @@ function client() {
                 if (fileInfos.isFinished())
                     break
 
-                await waitForSomethingAvailable(fileInfos)
-
-                let fileInfo = await fileInfos.pop()
+                let fileInfo = await waitForSomethingAvailable(fileInfos)
 
                 let send1 = waitAndPush(waitedShas, fileInfo, 50, 8)
                 let send2 = waitAndPush(askShaStatus, fileInfo, 50, 8)
@@ -139,9 +135,7 @@ function client() {
                 break
             }
 
-            await waitForSomethingAvailable(rcvQ)
-
-            let buffer = await rcvQ.pop()
+            let buffer = await waitForSomethingAvailable(rcvQ)
             await processMessage(buffer, async data => {
                 console.log(`CLIENT DATA RCV`)
             }, ws, sendRpcQueue)

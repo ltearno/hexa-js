@@ -18,10 +18,13 @@ export interface QueueMng {
     empty(): boolean
 }
 
-export interface QueueRead<T> {
+export interface Popper<T> {
+    pop(): Promise<T>
+}
+
+export interface QueueRead<T> extends Popper<T> {
     name?: string
     isFinished(): boolean
-    pop(): Promise<T>
 }
 
 export interface QueueWrite<T> {
@@ -128,16 +131,17 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 }
 
-export async function waitForSomethingAvailable(q: QueueMng): Promise<void> {
-    if (!q.empty())
-        return
-
-    await new Promise(resolve => {
-        let l = q.addLevelListener(1, 1, async () => {
-            l.forget()
-            resolve()
+export async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
+    if (q.empty()) {
+        await new Promise(resolve => {
+            let l = q.addLevelListener(1, 1, async () => {
+                l.forget()
+                resolve()
+            })
         })
-    })
+    }
+
+    return await q.pop()
 }
 
 // wait so that queue stays lower than high and higher than low levels

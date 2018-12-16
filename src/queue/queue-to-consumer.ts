@@ -16,9 +16,7 @@ export class QueueToConsumerPipe<T> {
     private async readLoop() {
         while (true) {
             IS_DEBUG && console.log(`q2c wait for ${this.q.name}`)
-            await waitForSomethingAvailable(this.q)
-
-            let data = await this.q.pop()
+            let data = await waitForSomethingAvailable(this.q)
 
             //console.log(`q2c processing data on ${this.q.name} ...`)
             await this.consumer(data)

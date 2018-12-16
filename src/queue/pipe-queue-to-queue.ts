@@ -2,11 +2,11 @@ import { QueueRead, QueueWrite, QueueMng, waitForSomethingAvailable } from './qu
 
 const IS_DEBUG = false
 
-export class QueueToQueuePipe<Source, Destination> {
+export class QueueToQueuePipe<T> {
     private pauseFinisher: () => any = null
     private resumePromise: Promise<void> = null
 
-    constructor(private s: QueueRead<Source> & QueueMng, private q: QueueWrite<Destination> & QueueMng, high: number, low: number) {
+    constructor(private s: QueueRead<T> & QueueMng, private q: QueueWrite<T> & QueueMng, high: number, low: number) {
         if (high <= low) {
             console.error(`high <= low !!!`)
             return
@@ -35,8 +35,6 @@ export class QueueToQueuePipe<Source, Destination> {
         })
     }
 
-    transform: (dataIn: Source) => Promise<Destination> = null
-
     async start() {
         while (true) {
             // if paused, wait for unpause
@@ -46,16 +44,7 @@ export class QueueToQueuePipe<Source, Destination> {
             }
 
             IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} wait data`)
-            await waitForSomethingAvailable(this.s)
-
-            // sometimes types are transformed, sometimes not
-            // TODO express that with the TS type system
-            let data: any = await this.s.pop()
-
-            if (this.transform) {
-                IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} transform`)
-                data = await this.transform(data)
-            }
+            let data: any = await waitForSomethingAvailable(this.s)
 
             IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
             await this.q.push(data)
