@@ -11,6 +11,9 @@ let hash = require('hash.js')
 let cryptojs = require('crypto-js')
 import * as forge from 'node-forge'
 import * as OrderedJson from './ordered-json'
+import * as FsTools from './FsTools'
+import fs = require('fs')
+import * as Stream from 'stream'
 
 export function sameObjects(a, b) {
     return OrderedJson.stringify(a) == OrderedJson.stringify(b)
@@ -22,24 +25,43 @@ export async function hashString(value: string): Promise<string> {
     var md = forge.md.sha256.create();
     md.update(value);
     return md.digest().toHex()
-
-    /*if (value === "")
-        return EMPTY_PAYLOAD_SHA
-
-    return hash.sha256().update(value).digest('hex')*/
 }
 
 export function hashStringSync(value: string): string {
     var md = forge.md.sha256.create();
     md.update(value);
     return md.digest().toHex()
+}
 
-    /*
-        if (value === "")
+export function hashStream(input: Stream.Readable): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        let hash = forge.md.sha256.create()
+
+        input.on('data', chunk => {
+            hash.update(chunk)
+        }).on('end', () => {
+            resolve(hash.digest().toHex())
+        }).on('error', (err) => {
+            reject(err);
+        });
+    })
+}
+
+export async function hashFile(fileName: string): Promise<string> {
+    try {
+        let stat = await FsTools.lstat(fileName);
+        if (stat.size == 0)
             return EMPTY_PAYLOAD_SHA
-    
-        return hash.sha256().update(value).digest('hex')
-        */
+
+        let input = fs.createReadStream(fileName)
+
+        let sha = await hashStream(input)
+
+        return sha
+    }
+    catch (error) {
+        throw `error hashing ${fileName}`
+    }
 }
 
 export function encryptAes(data: any, secret: string) {

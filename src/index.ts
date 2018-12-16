@@ -1,16 +1,29 @@
-import * as fs from 'fs'
 import { Queue, waitPusher, waitPopper, QueueRead } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
-import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
 import * as Tools from './tools'
-import * as TestTools from './test-tools'
-import * as NetworkApi from './network-api'
 import * as NetworkApiImpl from './network-api-node-impl'
-import * as Serialisation from './serialisation'
 import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'
-import { QueueToQueuePipe } from './queue/pipe-queue-to-queue';
+import * as HashTools from './hash-tools'
+
+enum RequestType {
+    AddShaInTx = 0,
+    ShaBytes = 1
+}
+
+interface FileSpec {
+    name: string
+    isDirectory: boolean
+    lastWrite: number
+    size: number
+}
+
+interface AddShaInTx {
+    type: RequestType.AddShaInTx
+    sha: string
+    file: FileSpec
+}
 
 /*
 
@@ -22,28 +35,13 @@ queues :
 
 */
 
-async function processMessage(buffer: Buffer, dataProcessor: (data: any[]) => Promise<void>, ws: NetworkApi.WebSocket, sendRpcQueue: QueueRead<any>) {
-    let list = Serialisation.deserialize(buffer)
-    let messageId = list.shift()
-    if (messageId == 0) {
-        // it's an ack
-        //console.log(`receive ack for ${messageId}`)
-        await sendRpcQueue.pop()
-    }
-    else {
-        await dataProcessor(list)
-        ws.send(Serialisation.serialize([0, messageId]))
-    }
-}
-
 function directPusher<T>(q: Queue<T>) {
     return async (data: T) => {
         return await q.push(data)
     }
 }
 
-interface RpcQuery {
-}
+type RpcQuery = AddShaInTx
 
 interface RpcReply {
 }
@@ -88,7 +86,6 @@ function server() {
 function client() {
     let network = new NetworkApiImpl.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:8080/queue')
-    let sendRpcQueue = new Queue<string>('rpc')
     ws.on('open', async () => {
         console.log('opened ws client, go !')
 
@@ -118,24 +115,43 @@ function client() {
         let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
         s2q1.start()
 
-        let askShaStatus = new Queue<DirectoryLister.FileIteration>('ask-sha-status');
+        // add sha in tx requests, which stores the sha in the tx and returns the knwon bytes length (for sending sha bytes)
 
-        (async () => {
-            let popper = waitPopper(fileInfos)
-            let askShaStatusPusher = waitPusher(askShaStatus, 50, 8)
+        let addShaInTx = new Queue<AddShaInTx>('add-sha-in-tx')
 
-            while (true) {
-                if (fileInfos.isFinished())
-                    break
+        {
+            (async () => {
+                let popper = waitPopper(fileInfos)
+                let addShaInTxPusher = waitPusher(addShaInTx, 50, 8)
 
-                let fileInfo = await popper()
+                while (true) {
+                    if (fileInfos.isFinished())
+                        break
 
-                await askShaStatusPusher(fileInfo)
-            }
-        })()
+                    let fileInfo = await popper()
 
-        let askShaStatus2Rpc = new QueueToQueuePipe(askShaStatus, rpcTxIn, 20, 10)
-        askShaStatus2Rpc.start()
+                    await addShaInTxPusher({
+                        type: RequestType.AddShaInTx,
+                        sha: fileInfo.isDirectory ? '' : await HashTools.hashFile(fileInfo.name),
+                        file: fileInfo
+                    })
+                }
+            })()
+        }
+
+        {
+            (async () => {
+                // TODO choose source between addShaInTx, shaBytes, rpcCalls, etc...
+                let popper = waitPopper(addShaInTx)
+                let rpcTxPusher = waitPusher(rpcTxIn, 20, 10)
+
+                while (true) {
+                    let rpcRequest = await popper()
+
+                    await rpcTxPusher(rpcRequest)
+                }
+            })()
+        }
 
         let popper = waitPopper(rpcTxOut)
         while (true) {
