@@ -33,6 +33,41 @@ async function processMessage(buffer: Buffer, dataProcessor: (data: any[]) => Pr
     }
 }
 
+async function networkLoop(ws: NetworkApi.WebSocket) {
+    console.log(`start ws loop`)
+
+    let sendRpcQueue = new Queue<string>('rpc')
+    let rcvQ = new Queue<Buffer>('rcv')
+
+    ws.on('error', err => {
+        console.log(`error on ws ${err}`)
+        ws.close()
+    })
+
+    ws.on('close', () => {
+        console.log(`closed ws`)
+        rcvQ.finish()
+    })
+
+    ws.on('message', async (message) => {
+        rcvQ.push(message)
+    })
+
+    while (true) {
+        if (rcvQ.isFinished()) {
+            console.log(`FINISHED RECEIVING`)
+            break
+        }
+
+        await waitForSomethingAvailable(rcvQ)
+
+        let buffer = await rcvQ.pop()
+        await processMessage(buffer, async data => {
+            console.log(`DATA RCV`)
+        }, ws, sendRpcQueue)
+    }
+}
+
 function server() {
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', async (ws, req) => {
