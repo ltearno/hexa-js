@@ -8,6 +8,7 @@ import * as TestTools from './test-tools'
 import * as NetworkApi from './network-api'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as Serialisation from './serialisation'
+import * as DirectoryLister from './directory-lister'
 
 /*
 
@@ -24,47 +25,12 @@ async function processMessage(buffer: Buffer, dataProcessor: (data: any[]) => Pr
     let messageId = list.shift()
     if (messageId == 0) {
         // it's an ack
-        console.log(`receive ack for ${messageId}`)
+        //console.log(`receive ack for ${messageId}`)
         await sendRpcQueue.pop()
     }
     else {
         await dataProcessor(list)
         ws.send(Serialisation.serialize([0, messageId]))
-    }
-}
-
-async function networkLoop(ws: NetworkApi.WebSocket) {
-    console.log(`start ws loop`)
-
-    let sendRpcQueue = new Queue<string>('rpc')
-    let rcvQ = new Queue<Buffer>('rcv')
-
-    ws.on('error', err => {
-        console.log(`error on ws ${err}`)
-        ws.close()
-    })
-
-    ws.on('close', () => {
-        console.log(`closed ws`)
-        rcvQ.finish()
-    })
-
-    ws.on('message', async (message) => {
-        rcvQ.push(message)
-    })
-
-    while (true) {
-        if (rcvQ.isFinished()) {
-            console.log(`FINISHED RECEIVING`)
-            break
-        }
-
-        await waitForSomethingAvailable(rcvQ)
-
-        let buffer = await rcvQ.pop()
-        await processMessage(buffer, async data => {
-            console.log(`DATA RCV`)
-        }, ws, sendRpcQueue)
     }
 }
 
@@ -99,14 +65,15 @@ function server() {
             await waitForSomethingAvailable(rcvQ)
 
             let buffer = await rcvQ.pop()
-            await processMessage(buffer, async data => {
-                console.log(`DATA RCV`)
+            await processMessage(buffer, async (data: any) => {
+                //console.log(`DATA RCV ${JSON.stringify(data)}`)
+                console.log(`${data[0].name}`)
             }, ws, sendRpcQueue)
         }
     })
 }
 
-let nextMessageIdBase = TestTools.uuidv4()
+let nextMessageIdBase = TestTools.uuidv4().substr(0, 7)
 let nextMessageId = 1
 
 function client() {
@@ -116,6 +83,8 @@ function client() {
     ws.on('open', async () => {
         console.log('opened ws client, go !')
 
+        let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
+
         let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
             flags: 'r',
             encoding: null,
@@ -123,13 +92,14 @@ function client() {
             autoClose: true
         })
 
-        let q1 = new Queue<Buffer>('q1')
-        let s2q1 = new StreamToQueuePipe(inputStream, q1, 5, 1)
+        //let q1 = new Queue<Buffer>('q1')
+        let q1 = new Queue<DirectoryLister.FileIteration>('fileslist')
+        let s2q1 = new StreamToQueuePipe(directoryLister, q1, 50, 10)
         s2q1.start()
 
         let p = new QueueToConsumerPipe(q1, async data => {
             let messageId = nextMessageIdBase + (nextMessageId++)
-            await waitAndPush(sendRpcQueue, messageId, 5, 2)
+            await waitAndPush(sendRpcQueue, messageId, 20, 10)
             ws.send(Serialisation.serialize([messageId, data]))
         }, () => {
             console.log(`FINISHED SENDING`)

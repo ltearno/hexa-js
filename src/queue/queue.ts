@@ -1,4 +1,4 @@
-import fs = require('fs')
+const IS_DEBUG = false
 
 export interface QueueItem<T> {
     data: T
@@ -63,7 +63,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     async push(data: T): Promise<boolean> {
         this.queue.push({ data })
 
-        this.displayState('push')
+        IS_DEBUG && this.displayState('push')
 
         let listenersToCall = []
 
@@ -83,7 +83,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     async pop(): Promise<T> {
         const result = this.queue.shift().data
 
-        this.displayState('pop')
+        IS_DEBUG && this.displayState('pop')
 
         let listenersToCall: QueueListener[] = []
 

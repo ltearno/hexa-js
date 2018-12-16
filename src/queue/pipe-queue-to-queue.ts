@@ -1,5 +1,7 @@
 import { QueueRead, QueueWrite, QueueMng, waitForSomethingAvailable } from './queue'
 
+const IS_DEBUG = false
+
 export class QueueToQueuePipe<Source, Destination> {
     private pauseFinisher: () => any = null
     private resumePromise: Promise<void> = null
@@ -12,7 +14,7 @@ export class QueueToQueuePipe<Source, Destination> {
 
         // queue has too much items => pause inputs
         q.addLevelListener(high, 1, async () => {
-            console.log(`q2q ${this.s.name}->${this.q.name} pause inputs`)
+            IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} pause inputs`)
             this.pauseFinisher = null
             this.resumePromise = new Promise(resolve => {
                 this.pauseFinisher = resolve
@@ -22,7 +24,7 @@ export class QueueToQueuePipe<Source, Destination> {
         // queue has low items => resume inputs
         q.addLevelListener(low, -1, async () => {
             if (this.pauseFinisher) {
-                console.log(`q2q ${this.s.name}->${this.q.name} unpause`)
+                IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} unpause`)
                 let pauseFinisher = this.pauseFinisher
                 this.pauseFinisher = null
                 this.resumePromise = null
@@ -39,11 +41,11 @@ export class QueueToQueuePipe<Source, Destination> {
         while (true) {
             // if paused, wait for unpause
             if (this.resumePromise) {
-                console.log(`q2q ${this.s.name}->${this.q.name} wait unpause`)
+                IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} wait unpause`)
                 await this.resumePromise
             }
 
-            console.log(`q2q ${this.s.name}->${this.q.name} wait data`)
+            IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} wait data`)
             await waitForSomethingAvailable(this.s)
 
             // sometimes types are transformed, sometimes not
@@ -51,15 +53,15 @@ export class QueueToQueuePipe<Source, Destination> {
             let data: any = await this.s.pop()
 
             if (this.transform) {
-                console.log(`q2q ${this.s.name}->${this.q.name} transform`)
+                IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} transform`)
                 data = await this.transform(data)
             }
 
-            console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
+            IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} tx data`)
             await this.q.push(data)
 
             if (this.s.isFinished()) {
-                console.log(`q2q ${this.s.name}->${this.q.name} end of job !`)
+                IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} end of job !`)
                 this.q.finish()
                 return
             }

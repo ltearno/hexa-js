@@ -1,5 +1,7 @@
 import { QueueRead, QueueMng, waitForSomethingAvailable } from './queue'
 
+const IS_DEBUG = false
+
 export class QueueToConsumerPipe<T> {
     constructor(
         private q: QueueRead<T> & QueueMng,
@@ -13,7 +15,7 @@ export class QueueToConsumerPipe<T> {
 
     private async readLoop() {
         while (true) {
-            console.log(`q2c wait for ${this.q.name}`)
+            IS_DEBUG && console.log(`q2c wait for ${this.q.name}`)
             await waitForSomethingAvailable(this.q)
 
             let data = await this.q.pop()
@@ -23,7 +25,7 @@ export class QueueToConsumerPipe<T> {
             //console.log(`LOOP processing done on ${this.q.name}.`)
 
             if (this.q.isFinished()) {
-                console.log(`q2c end on ${this.q.name}`)
+                IS_DEBUG && console.log(`q2c end on ${this.q.name}`)
                 this.finish()
                 return
             }
