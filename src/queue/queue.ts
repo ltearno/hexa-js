@@ -85,7 +85,11 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
 
     async pop(): Promise<T> {
         const result = this.queue.shift().data
+        await this.updateAfterPop()
+        return result
+    }
 
+    private async updateAfterPop() {
         IS_DEBUG && this.displayState('pop')
 
         let listenersToCall: QueueListener[] = []
@@ -99,7 +103,17 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         for (let listener of listenersToCall) {
             await listener()
         }
+    }
 
+    async popFilter(filter: (item: T) => boolean): Promise<T> {
+        const resultIndex = this.queue.findIndex(queueItem => filter(queueItem.data))
+        if (resultIndex < 0)
+            throw 'nout found item when popFilter'
+
+        let result = this.queue[resultIndex].data
+        this.queue = this.queue.splice(resultIndex, 1)
+
+        await this.updateAfterPop()
         return result
     }
 
@@ -138,7 +152,7 @@ export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
 }
 
 export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: number) {
-    return async data => {
+    return async (data: T) => {
         return await waitAndPush(q, data, high, low)
     }
 }
