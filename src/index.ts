@@ -25,6 +25,17 @@ interface AddShaInTx {
     file: FileSpec
 }
 
+interface AddShaInTxReply {
+    length: number
+}
+
+interface ShaBytes {
+    type: RequestType.ShaBytes
+    sha: string
+    offset: number
+    buffer: Buffer
+}
+
 /*
 
 queues :
@@ -76,7 +87,7 @@ function server() {
             console.log(`process RPC request...`)
             await rpcRxIn.push({
                 id: id,
-                reply: { test: 0 }
+                reply: { length: 0 }
             })
             console.log(`processed RPC request`)
         }
@@ -139,6 +150,26 @@ function client() {
             })()
         }
 
+        let shasToSend = new Queue<{ sha: string; file: FileSpec; offset: number }>('shas-to-send')
+        let shaBytes = new Queue<ShaBytes>('sha-bytes')
+
+        {
+            (async () => {
+                let popper = waitPopper(shasToSend)
+                let rpcTxPusher = waitPusher(shaBytes, 20, 10)
+
+                while (true) {
+                    let shaToSend = await popper()
+
+                    //TODO
+                    // open stream at offset
+                    // await a stream to queue pipe (check termination ok)
+
+                    await rpcTxPusher(rpcRequest)
+                }
+            })()
+        }
+
         {
             (async () => {
                 // TODO choose source between addShaInTx, shaBytes, rpcCalls, etc...
@@ -153,10 +184,22 @@ function client() {
             })()
         }
 
-        let popper = waitPopper(rpcTxOut)
-        while (true) {
-            let { request, reply } = await popper()
-            console.log(`received rpc reply ${JSON.stringify(reply)} ${JSON.stringify(request)}`)
+        {
+            (async () => {
+                let popper = waitPopper(rpcTxOut)
+                let shasToSendPusher = waitPusher(shasToSend, 20, 10)
+
+                while (true) {
+                    let { request, reply } = await popper()
+                    if (request.type == RequestType.AddShaInTx) {
+                        let remoteLength = (reply as AddShaInTxReply).length
+                        if (!request.file.isDirectory && remoteLength < request.file.size) {
+                            await shasToSendPusher({ sha: request.sha, file: request.file, offset: remoteLength })
+                        }
+                    }
+                    console.log(`received rpc reply ${JSON.stringify(reply)} ${JSON.stringify(request)}`)
+                }
+            })()
         }
     })
     ws.on('close', () => console.log('close ws client'))
