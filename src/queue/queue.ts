@@ -19,6 +19,7 @@ export interface QueueMng {
 }
 
 export type Popper<T> = () => Promise<T>
+export type Pusher<T> = (value: T) => Promise<boolean>
 
 export interface QueueRead<T> {
     name?: string
@@ -28,7 +29,7 @@ export interface QueueRead<T> {
 
 export interface QueueWrite<T> {
     name?: string
-    push(data: T): Promise<boolean>
+    push: Pusher<T>
     finish()
     size(): number
 }
@@ -130,6 +131,18 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 }
 
+export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
+    return async () => {
+        return await waitForSomethingAvailable(q)
+    }
+}
+
+export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: number) {
+    return async data => {
+        return await waitAndPush(q, data, high, low)
+    }
+}
+
 async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
     if (q.empty()) {
         await new Promise(resolve => {
@@ -143,14 +156,8 @@ async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise
     return await q.pop()
 }
 
-export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
-    return async () => {
-        return await waitForSomethingAvailable(q)
-    }
-}
-
 // wait so that queue stays lower than high and higher than low levels
-export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
+async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
     if (high < low)
         throw 'impossible waitandpush !'
 

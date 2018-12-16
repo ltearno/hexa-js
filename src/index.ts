@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { Queue, waitAndPush, waitPopper, QueueRead } from './queue/queue'
+import { Queue, waitPusher, waitPopper, QueueRead } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
@@ -102,23 +102,27 @@ function client() {
 
         (async () => {
             let popper = waitPopper(fileInfos)
+            let waitedShasPusher = waitPusher(waitedShas, 50, 8)
+            let askShaStatusPusher = waitPusher(askShaStatus, 50, 8)
+
             while (true) {
                 if (fileInfos.isFinished())
                     break
 
                 let fileInfo = await popper()
 
-                let send1 = waitAndPush(waitedShas, fileInfo, 50, 8)
-                let send2 = waitAndPush(askShaStatus, fileInfo, 50, 8)
+                let send1 = waitedShasPusher(fileInfo)
+                let send2 = askShaStatusPusher(fileInfo)
 
                 await send1
                 await send2
             }
         })()
 
+        let sendRpcQueuePusher = waitPusher(sendRpcQueue, 20, 10)
         let p = new QueueToConsumerPipe(askShaStatus, async data => {
             let messageId = nextMessageIdBase + (nextMessageId++)
-            await waitAndPush(sendRpcQueue, messageId, 20, 10)
+            await sendRpcQueuePusher(messageId)
             ws.send(Serialisation.serialize([messageId, data]))
         }, () => {
             console.log(`FINISHED SENDING`)
