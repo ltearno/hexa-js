@@ -93,11 +93,31 @@ function client() {
         })
 
         //let q1 = new Queue<Buffer>('q1')
-        let q1 = new Queue<DirectoryLister.FileIteration>('fileslist')
-        let s2q1 = new StreamToQueuePipe(directoryLister, q1, 50, 10)
+        let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
+        let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
         s2q1.start()
 
-        let p = new QueueToConsumerPipe(q1, async data => {
+        let waitedShas = new Queue<DirectoryLister.FileIteration>('waited-shas')
+        let askShaStatus = new Queue<DirectoryLister.FileIteration>('ask-sha-status');
+
+        (async () => {
+            while (true) {
+                if (fileInfos.isFinished())
+                    break
+
+                await waitForSomethingAvailable(fileInfos)
+
+                let fileInfo = await fileInfos.pop()
+
+                let send1 = waitAndPush(waitedShas, fileInfo, 50, 8)
+                let send2 = waitAndPush(askShaStatus, fileInfo, 50, 8)
+
+                await send1
+                await send2
+            }
+        })()
+
+        let p = new QueueToConsumerPipe(askShaStatus, async data => {
             let messageId = nextMessageIdBase + (nextMessageId++)
             await waitAndPush(sendRpcQueue, messageId, 20, 10)
             ws.send(Serialisation.serialize([messageId, data]))
