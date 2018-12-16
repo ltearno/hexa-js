@@ -144,6 +144,14 @@ export async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): 
     return await q.pop()
 }
 
+export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
+    return {
+        pop: async () => {
+            return await waitForSomethingAvailable(q)
+        }
+    }
+}
+
 // wait so that queue stays lower than high and higher than low levels
 export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
     if (high < low)
