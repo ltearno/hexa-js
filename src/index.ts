@@ -9,6 +9,8 @@ import * as NetworkApi from './network-api'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as Serialisation from './serialisation'
 import * as DirectoryLister from './directory-lister'
+import * as Transport from './network-transport'
+import { QueueToQueuePipe } from './queue/pipe-queue-to-queue';
 
 /*
 
@@ -34,12 +36,30 @@ async function processMessage(buffer: Buffer, dataProcessor: (data: any[]) => Pr
     }
 }
 
+function directPusher<T>(q: Queue<T>) {
+    return async (data: T) => {
+        return await q.push(data)
+    }
+}
+
+interface RpcQuery {
+}
+
+interface RpcReply {
+}
+
 function server() {
     let app = Tools.createExpressApp(8080)
     app.ws('/queue', async (ws, req) => {
         console.log(`opened ws`)
 
-        let sendRpcQueue = new Queue<string>('rpc')
+        let rpcTxIn = new Queue<RpcQuery>('rpc-tx-in')
+        let rpcTxOut = new Queue<{ request: RpcQuery; reply: RpcReply }>('rpc-tx-out')
+        let rpcRxIn = new Queue<{ id: string; reply: RpcReply }>('rpc-rx-in')
+        let rpcRxOut = new Queue<{ id: string; request: RpcQuery }>('rpc-rx-out')
+
+        let transport = new Transport.Transport(waitPopper(rpcTxIn), directPusher(rpcTxOut), directPusher(rpcRxOut), waitPopper(rpcRxIn), ws)
+        transport.start()
 
         ws.on('error', err => {
             console.log(`error on ws ${err}`)
@@ -48,33 +68,22 @@ function server() {
 
         ws.on('close', () => {
             console.log(`closed ws`)
-            rcvQ.finish()
+            // todo close transport
         })
 
-        let rcvQ = new Queue<Buffer>('rcv')
-        ws.on('message', async (message) => {
-            rcvQ.push(message)
-        })
-
-        let popper = waitPopper(rcvQ)
-
+        let requestToProcessWaiter = waitPopper(rpcRxOut)
         while (true) {
-            if (rcvQ.isFinished()) {
-                console.log(`FINISHED RECEIVING`)
-                break
-            }
+            let { id, request } = await requestToProcessWaiter()
 
-            let buffer = await popper()
-            await processMessage(buffer, async (data: any) => {
-                //console.log(`DATA RCV ${JSON.stringify(data)}`)
-                console.log(`${data[0].name}`)
-            }, ws, sendRpcQueue)
+            console.log(`process RPC request...`)
+            await rpcRxIn.push({
+                id: id,
+                reply: { test: 0 }
+            })
+            console.log(`processed RPC request`)
         }
     })
 }
-
-let nextMessageIdBase = TestTools.uuidv4().substr(0, 7)
-let nextMessageId = 1
 
 function client() {
     let network = new NetworkApiImpl.NetworkApiNodeImpl()
@@ -83,26 +92,36 @@ function client() {
     ws.on('open', async () => {
         console.log('opened ws client, go !')
 
+        let rpcTxIn = new Queue<RpcQuery>('rpc-tx-in')
+        let rpcTxOut = new Queue<{ request: RpcQuery; reply: RpcReply }>('rpc-tx-out')
+        let rpcRxIn = new Queue<{ id: string; reply: RpcReply }>('rpc-rx-in')
+        let rpcRxOut = new Queue<{ id: string; request: RpcQuery }>('rpc-rx-out')
+
+        let transport = new Transport.Transport(waitPopper(rpcTxIn), directPusher(rpcTxOut), directPusher(rpcRxOut), waitPopper(rpcRxIn), ws)
+        transport.start()
+
+
+
+
+
+
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
 
-        let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
+        /*let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
             flags: 'r',
             encoding: null,
             start: 0,
             autoClose: true
-        })
+        })*/
 
-        //let q1 = new Queue<Buffer>('q1')
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
         let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
         s2q1.start()
 
-        let waitedShas = new Queue<DirectoryLister.FileIteration>('waited-shas')
         let askShaStatus = new Queue<DirectoryLister.FileIteration>('ask-sha-status');
 
         (async () => {
             let popper = waitPopper(fileInfos)
-            let waitedShasPusher = waitPusher(waitedShas, 50, 8)
             let askShaStatusPusher = waitPusher(askShaStatus, 50, 8)
 
             while (true) {
@@ -111,43 +130,17 @@ function client() {
 
                 let fileInfo = await popper()
 
-                let send1 = waitedShasPusher(fileInfo)
-                let send2 = askShaStatusPusher(fileInfo)
-
-                await send1
-                await send2
+                await askShaStatusPusher(fileInfo)
             }
         })()
 
-        let sendRpcQueuePusher = waitPusher(sendRpcQueue, 20, 10)
-        let p = new QueueToConsumerPipe(askShaStatus, async data => {
-            let messageId = nextMessageIdBase + (nextMessageId++)
-            await sendRpcQueuePusher(messageId)
-            ws.send(Serialisation.serialize([messageId, data]))
-        }, () => {
-            console.log(`FINISHED SENDING`)
-            sendRpcQueue.finish()
-        })
-        p.start()
+        let askShaStatus2Rpc = new QueueToQueuePipe(askShaStatus, rpcTxIn, 20, 10)
+        askShaStatus2Rpc.start()
 
-
-        let rcvQ = new Queue<Buffer>('rcv')
-        ws.on('message', async (message) => {
-            rcvQ.push(message)
-        })
-
+        let popper = waitPopper(rpcTxOut)
         while (true) {
-            let popper = waitPopper(rcvQ)
-            if (rcvQ.isFinished()) {
-                console.log(`FINISHED CLIENT RECEIVING`)
-                break
-            }
-
-            waitedShas.pop()
-            let buffer = await popper()
-            await processMessage(buffer, async data => {
-                console.log(`CLIENT DATA RCV`)
-            }, ws, sendRpcQueue)
+            let { request, reply } = await popper()
+            console.log(`received rpc reply ${JSON.stringify(reply)} ${JSON.stringify(request)}`)
         }
     })
     ws.on('close', () => console.log('close ws client'))

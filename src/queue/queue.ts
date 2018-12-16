@@ -106,12 +106,12 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 
     async popFilter(filter: (item: T) => boolean): Promise<T> {
-        const resultIndex = this.queue.findIndex(queueItem => filter(queueItem.data))
+        const resultIndex = this.queue.map(queueItem=>queueItem.data).findIndex(filter)
         if (resultIndex < 0)
             throw 'nout found item when popFilter'
 
         let result = this.queue[resultIndex].data
-        this.queue = this.queue.splice(resultIndex, 1)
+        this.queue.splice(resultIndex, 1)
 
         await this.updateAfterPop()
         return result

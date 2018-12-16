@@ -6,19 +6,19 @@ import * as TestTools from './test-tools'
 const TYPE_REQUEST = 0
 const TYPE_REPLY = 1
 
-export class Transport {
+export class Transport<Request, Reply> {
     constructor(
-        private txin: Queue.Popper<any>,
-        private txout: Queue.Pusher<any>,
-        private rxout: Queue.Pusher<{ id: string; request: any }>,
-        private rxin: Queue.Popper<{ id: string; reply: any }>,
+        private txin: Queue.Popper<Request>,
+        private txout: Queue.Pusher<{ request: Request; reply: Reply }>,
+        private rxout: Queue.Pusher<{ id: string; request: Request }>,
+        private rxin: Queue.Popper<{ id: string; reply: Reply }>,
         private ws: NetworkApi.WebSocket
     ) { }
 
     private nextMessageBase = TestTools.uuidv4().substr(0, 3) + '#'
     private nextMessageId = 1
 
-    private networkQueue = new Queue.Queue<{ messageId: string; request: any }>('network')
+    private networkQueue = new Queue.Queue<{ messageId: string; request: Request }>('network')
     private networkQueuePusher = Queue.waitPusher(this.networkQueue, 20, 10)
 
     private rcvQueue = new Queue.Queue<Buffer>('rcv')
@@ -28,7 +28,7 @@ export class Transport {
         this.ws.on('message', message => {
             this.rcvQueue.push(message)
         })
-        
+
         { // rcv queue
             let rcvQueuePopper = Queue.waitPopper(this.rcvQueue);
             (async () => {
