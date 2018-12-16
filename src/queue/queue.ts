@@ -139,3 +139,19 @@ export async function waitForSomethingAvailable(q: QueueMng): Promise<void> {
         })
     })
 }
+
+// wait so that queue stays lower than high and higher than low levels
+export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
+    if (high < low)
+        throw 'impossible waitandpush !'
+
+    if (q.size() > high) {
+        await new Promise(resolve => {
+            q.addLevelListener(low, -1, async () => {
+                resolve()
+            })
+        })
+    }
+
+    await q.push(data)
+}

@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import { Queue, waitForSomethingAvailable, QueueRead } from './queue/queue'
+import { Queue, waitAndPush, waitForSomethingAvailable, QueueRead } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { QueueToConsumerPipe } from './queue/queue-to-consumer'
 
@@ -93,17 +93,8 @@ function client() {
         s2q1.start()
 
         let p = new QueueToConsumerPipe(q1, async data => {
-            if (sendRpcQueue.size() > 5) {
-                // wait until only 2
-                await new Promise(resolve => {
-                    sendRpcQueue.addLevelListener(2, -1, async () => {
-                        resolve()
-                    })
-                })
-            }
-
             let messageId = nextMessageIdBase + (nextMessageId++)
-            sendRpcQueue.push(messageId)
+            await waitAndPush(sendRpcQueue, messageId, 5, 2)
             ws.send(Serialisation.serialize([messageId, data]))
         }, () => {
             console.log(`FINISHED SENDING`)
