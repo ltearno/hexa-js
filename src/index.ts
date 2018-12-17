@@ -89,7 +89,7 @@ function server() {
 
             if (request.type == RequestType.ShaBytes) {
                 nbBytesReceived += request.buffer.data.length
-                console.log(`received bytes ${nbBytesReceived}`)
+                //console.log(`received bytes ${nbBytesReceived}`)
             }
 
             await rpcRxIn.push({
@@ -155,7 +155,7 @@ function client() {
         {
             (async () => {
                 let popper = waitPopper(shasToSend)
-                let rpcTxPusher = waitPusher(shaBytes, 20, 10)
+                let shaBytesPusher = waitPusher(shaBytes, 20, 10)
 
                 while (true) {
                     let shaToSend = await popper()
@@ -170,7 +170,7 @@ function client() {
 
                         let buffer = await FsTools.readFile(file, offset, readLength)
 
-                        await rpcTxPusher({
+                        await shaBytesPusher({
                             type: RequestType.ShaBytes,
                             sha: shaToSend.sha,
                             buffer,
@@ -182,7 +182,7 @@ function client() {
 
                     await FsTools.closeFile(file)
 
-                    console.log(`finished push ${shaToSend.file.name}`)
+                    console.log(`finished push ${shaToSend.file.name}, still ${shasToSend.size()} to do, ${addShaInTx.size()} sha to add in tx`)
                 }
             })()
         }
@@ -203,7 +203,8 @@ function client() {
                 }
 
                 while (true) {
-                    await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
+                    if (shaBytes.empty() && addShaInTx.empty())
+                        await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
 
                     let rpcRequest = null
                     if (!shaBytes.empty())
