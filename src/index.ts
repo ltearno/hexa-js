@@ -1,5 +1,5 @@
 import { Queue, waitPusher, waitPopper } from './queue/queue'
-import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
+import { StreamToQueuePipe, FileStreamToQueuePipe } from './queue/pipe-stream-to-queue'
 
 import * as fs from 'fs'
 import * as Tools from './tools'
@@ -144,6 +144,13 @@ function client() {
 
                 while (true) {
                     let shaToSend = await popper()
+
+                    /*let buffers = new Queue<{ offset: number; buffer: Buffer }>('file-buffers')
+                    let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.offset, buffers, 100, 80)
+                    // TODO : launch the buffers reading loop which transform buffers to ShaBytes and send them
+                    await f2q.start()
+                    buffers.finish()*/
+                    // TODO => take in account finish in waiter ?
 
                     let offset = shaToSend.offset
                     const bufferLength = 4096
