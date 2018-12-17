@@ -6,7 +6,7 @@ import * as TestTools from './test-tools'
 const TYPE_REQUEST = 0
 const TYPE_REPLY = 1
 
-export class Transport<Request, Reply> {
+export class Transport<Request extends any[], Reply extends any[]> {
     constructor(
         private txin: Queue.Popper<Request>,
         private txout: Queue.Pusher<{ request: Request; reply: Reply }>,
@@ -33,16 +33,18 @@ export class Transport<Request, Reply> {
             let rcvQueuePopper = Queue.waitPopper(this.rcvQueue);
             (async () => {
                 while (true) {
-                    let [type, messageId, data] = Serialisation.deserialize(await rcvQueuePopper())
+                    let data = Serialisation.deserialize(await rcvQueuePopper())
+                    let type = data.shift()
+                    let messageId = data.shift()
 
                     switch (type) {
                         case TYPE_REQUEST:
-                            await this.rxout({ id: messageId, request: data })
+                            await this.rxout({ id: messageId, request: data as Request })
                             break
 
                         case TYPE_REPLY:
                             let item = await this.networkQueue.popFilter(item => item.messageId == messageId)
-                            await this.txout({ request: item.request, reply: data })
+                            await this.txout({ request: item.request, reply: data as Reply })
                             break
 
                         default:
@@ -56,7 +58,7 @@ export class Transport<Request, Reply> {
             (async () => {
                 while (true) {
                     let { id, reply } = await this.rxin()
-                    this.ws.send(Serialisation.serialize([TYPE_REPLY, id, reply]))
+                    this.ws.send(Serialisation.serialize([TYPE_REPLY, id].concat(reply)))
                 }
             })()
         }
@@ -68,7 +70,7 @@ export class Transport<Request, Reply> {
                     let messageId = this.nextMessageBase + (this.nextMessageId++)
 
                     await this.networkQueuePusher({ messageId, request })
-                    this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId, request]))
+                    this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId].concat(request)))
                 }
             })()
         }

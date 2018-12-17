@@ -21,22 +21,9 @@ interface FileSpec {
     size: number
 }
 
-interface AddShaInTx {
-    type: RequestType.AddShaInTx
-    sha: string
-    file: FileSpec
-}
-
-interface AddShaInTxReply {
-    length: number
-}
-
-interface ShaBytes {
-    type: RequestType.ShaBytes
-    sha: string
-    offset: number
-    buffer: Buffer
-}
+type AddShaInTx = [RequestType.AddShaInTx, string, FileSpec] // type, sha, file
+type AddShaInTxReply = [number] // length
+type ShaBytes = [RequestType.ShaBytes, string, number, Buffer] // type, sha, offset, buffer
 
 /*
 
@@ -55,9 +42,7 @@ function directPusher<T>(q: Queue<T>) {
 }
 
 type RpcQuery = AddShaInTx | ShaBytes
-
-interface RpcReply {
-}
+type RpcReply = any[]
 
 function server() {
     let app = Tools.createExpressApp(8080)
@@ -87,14 +72,14 @@ function server() {
         while (true) {
             let { id, request } = await requestToProcessWaiter()
 
-            if (request.type == RequestType.ShaBytes) {
-                nbBytesReceived += request.buffer.data.length
-                //console.log(`received bytes ${nbBytesReceived}`)
+            if (request[0] == RequestType.ShaBytes) {
+                nbBytesReceived += request[3].length
+                console.log(`received bytes ${nbBytesReceived}`)
             }
 
             await rpcRxIn.push({
                 id: id,
-                reply: { length: 0 }
+                reply: [0]
             })
         }
     })
@@ -140,11 +125,11 @@ function client() {
 
                     let fileInfo = await popper()
 
-                    await addShaInTxPusher({
-                        type: RequestType.AddShaInTx,
-                        sha: fileInfo.isDirectory ? '' : await HashTools.hashFile(fileInfo.name),
-                        file: fileInfo
-                    })
+                    await addShaInTxPusher([
+                        RequestType.AddShaInTx,
+                        fileInfo.isDirectory ? '' : await HashTools.hashFile(fileInfo.name),
+                        fileInfo
+                    ])
                 }
             })()
         }
@@ -170,12 +155,12 @@ function client() {
 
                         let buffer = await FsTools.readFile(file, offset, readLength)
 
-                        await shaBytesPusher({
-                            type: RequestType.ShaBytes,
-                            sha: shaToSend.sha,
-                            buffer,
-                            offset
-                        })
+                        await shaBytesPusher([
+                            RequestType.ShaBytes,
+                            shaToSend.sha,
+                            offset,
+                            buffer
+                        ])
 
                         offset += readLength
                     }
@@ -224,10 +209,10 @@ function client() {
 
                 while (true) {
                     let { request, reply } = await popper()
-                    if (request.type == RequestType.AddShaInTx) {
+                    if (request[0] == RequestType.AddShaInTx) {
                         let remoteLength = (reply as AddShaInTxReply).length
-                        if (!request.file.isDirectory && remoteLength < request.file.size) {
-                            await shasToSendPusher({ sha: request.sha, file: request.file, offset: remoteLength })
+                        if (!request[2].isDirectory && remoteLength < request[2].size) {
+                            await shasToSendPusher({ sha: request[1], file: request[2], offset: remoteLength })
                         }
                     }
                     //console.log(`received rpc reply ${JSON.stringify(request.type)} ${JSON.stringify(reply)}`)
