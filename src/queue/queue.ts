@@ -45,14 +45,22 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     constructor(public name: string) { }
 
     finish() {
-        if (this.empty())
+        if (this.empty()) {
             this.finished = true
+            this.notifyFinish()
+        }
         else {
             let s = this.addLevelListener(0, -1, () => {
                 s.forget()
                 this.finished = true
+                this.notifyFinish()
             })
         }
+    }
+
+    private notifyFinish() {
+        this.listenersFinish.forEach(listener => listener())
+        this.listenersFinish.clear()
     }
 
     isFinished() {
@@ -136,6 +144,16 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
 
         return {
             forget: () => list.get(level).delete(listener)
+        }
+    }
+
+    private listenersFinish = new Set<QueueListener>()
+
+    addFinishListener(listener: QueueListener): ListenerSubscription {
+        this.listenersFinish.add(listener)
+
+        return {
+            forget: () => this.listenersFinish.delete(listener)
         }
     }
 
