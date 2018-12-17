@@ -194,7 +194,7 @@ function client() {
                 let waitForQueue = async <T>(q: Queue<T>): Promise<void> => {
                     if (q.empty()) {
                         await new Promise(resolve => {
-                            let l = q.addLevelListener(1, 1, async () => {
+                            let l = q.addLevelListener(1, 1, () => {
                                 l.forget()
                                 resolve()
                             })

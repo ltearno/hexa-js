@@ -5,7 +5,7 @@ export interface QueueItem<T> {
 }
 
 export interface QueueListener {
-    (): Promise<void>
+    (): void
 }
 
 export interface ListenerSubscription {
@@ -48,7 +48,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         if (this.empty())
             this.finished = true
         else {
-            let s = this.addLevelListener(0, -1, async () => {
+            let s = this.addLevelListener(0, -1, () => {
                 s.forget()
                 this.finished = true
             })
@@ -77,7 +77,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
             this.listenersLevel.get(this.queue.length).forEach(listener => listenersToCall.push(listener))
 
         for (let listener of listenersToCall) {
-            await listener()
+            listener()
         }
 
         return true
@@ -85,11 +85,11 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
 
     async pop(): Promise<T> {
         const result = this.queue.shift().data
-        await this.updateAfterPop()
+        this.updateAfterPop()
         return result
     }
 
-    private async updateAfterPop() {
+    private updateAfterPop() {
         IS_DEBUG && this.displayState('pop')
 
         let listenersToCall: QueueListener[] = []
@@ -101,7 +101,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
             this.listenersLevel.get(this.queue.length).forEach(listener => listenersToCall.push(listener))
 
         for (let listener of listenersToCall) {
-            await listener()
+            listener()
         }
     }
 
@@ -113,7 +113,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         let result = this.queue[resultIndex].data
         this.queue.splice(resultIndex, 1)
 
-        await this.updateAfterPop()
+        this.updateAfterPop()
         return result
     }
 
@@ -160,7 +160,7 @@ export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: nu
 async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
     if (q.empty()) {
         await new Promise(resolve => {
-            let l = q.addLevelListener(1, 1, async () => {
+            let l = q.addLevelListener(1, 1, () => {
                 l.forget()
                 resolve()
             })
@@ -177,7 +177,7 @@ async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number
 
     if (q.size() > high) {
         await new Promise(resolve => {
-            q.addLevelListener(low, -1, async () => {
+            q.addLevelListener(low, -1, () => {
                 resolve()
             })
         })

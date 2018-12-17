@@ -13,7 +13,7 @@ export class QueueToQueuePipe<T> {
         }
 
         // queue has too much items => pause inputs
-        q.addLevelListener(high, 1, async () => {
+        q.addLevelListener(high, 1, () => {
             IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} pause inputs`)
             this.pauseFinisher = null
             this.resumePromise = new Promise(resolve => {
@@ -22,7 +22,7 @@ export class QueueToQueuePipe<T> {
         })
 
         // queue has low items => resume inputs
-        q.addLevelListener(low, -1, async () => {
+        q.addLevelListener(low, -1, () => {
             if (this.pauseFinisher) {
                 IS_DEBUG && console.log(`q2q ${this.s.name}->${this.q.name} unpause`)
                 let pauseFinisher = this.pauseFinisher
