@@ -108,8 +108,14 @@ function client() {
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
 
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
-        let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
-        s2q1.start()
+
+        {
+            (async () => {
+                let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
+                await s2q1.start()
+                fileInfos.push(null)
+            })()
+        }
 
         // add sha in tx requests, which stores the sha in the tx and returns the knwon bytes length (for sending sha bytes)
 
@@ -122,6 +128,8 @@ function client() {
 
                 while (true) {
                     let fileInfo = await popper()
+                    if (!fileInfo)
+                        break
 
                     await addShaInTxPusher([
                         RequestType.AddShaInTx,
@@ -129,6 +137,9 @@ function client() {
                         fileInfo
                     ])
                 }
+
+                await addShaInTxPusher(null)
+                console.log(`finished fileInfos`)
             })()
         }
 
@@ -192,6 +203,7 @@ function client() {
                     }
                 }
 
+                let nbToFinish = 2
                 while (true) {
                     if (shaBytes.empty() && addShaInTx.empty())
                         await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
@@ -202,8 +214,17 @@ function client() {
                     else
                         rpcRequest = await addShaInTx.pop()
 
-                    await rpcTxPusher(rpcRequest)
+                    if (!rpcRequest) {
+                        nbToFinish--
+                        if (!nbToFinish)
+                            break
+                    }
+                    else {
+                        await rpcTxPusher(rpcRequest)
+                    }
                 }
+
+                console.log(`finished rpcPush`)
             })()
         }
 
