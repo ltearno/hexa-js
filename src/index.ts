@@ -1,4 +1,4 @@
-import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper } from './queue/queue'
+import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, Popper, Pusher } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
@@ -36,10 +36,25 @@ queues :
 
 */
 
-function directPusher<T>(q: Queue<T>) {
+function directPusher<T>(q: Queue<T>): Pusher<T> {
     return async (data: T) => {
         return q.push(data)
     }
+}
+
+// extract from one queue, transform, and push to other queue. finish if null is encountered
+async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher: Pusher<D>, t: (i: S) => Promise<D>) {
+    while (true) {
+        let fileInfo = await popper()
+        if (!fileInfo)
+            break
+
+        let transformed = await t(fileInfo)
+
+        await addShaInTxPusher(transformed)
+    }
+
+    await addShaInTxPusher(null)
 }
 
 type RpcQuery = AddShaInTx | ShaBytes
@@ -65,24 +80,29 @@ function server() {
 
         ws.on('close', () => {
             console.log(`closed ws`)
-            // todo close transport
+            rpcRxOut.push(null)
         })
 
-        let requestToProcessWaiter = waitPopper(rpcRxOut)
-        let nbBytesReceived = 0
-        while (true) {
-            let { id, request } = await requestToProcessWaiter()
+        await tunnelTransform(
+            waitPopper(rpcRxOut),
+            directPusher(rpcRxIn),
+            async (p: { id: string; request: RpcQuery }) => {
+                let { id, request } = p
 
-            if (request[0] == RequestType.ShaBytes) {
-                nbBytesReceived += request[3].length
-                //console.log(`received bytes ${nbBytesReceived}`)
-            }
+                if (request[0] == RequestType.ShaBytes) {
+                    return {
+                        id,
+                        reply: ['ok written']
+                    }
+                }
 
-            await rpcRxIn.push({
-                id: id,
-                reply: [0]
+                return {
+                    id,
+                    reply: [0]
+                }
             })
-        }
+
+        console.log(`bye bye !`)
     })
 }
 
@@ -106,7 +126,6 @@ function client() {
 
 
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
-
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
 
         {
@@ -117,31 +136,22 @@ function client() {
             })()
         }
 
-        // add sha in tx requests, which stores the sha in the tx and returns the knwon bytes length (for sending sha bytes)
-
         let addShaInTx = new Queue<AddShaInTx>('add-sha-in-tx')
 
-        {
-            (async () => {
-                let popper = waitPopper(fileInfos)
-                let addShaInTxPusher = waitPusher(addShaInTx, 50, 8)
-
-                while (true) {
-                    let fileInfo = await popper()
-                    if (!fileInfo)
-                        break
-
-                    await addShaInTxPusher([
-                        RequestType.AddShaInTx,
-                        fileInfo.isDirectory ? '' : await HashTools.hashFile(fileInfo.name),
-                        fileInfo
-                    ])
-                }
-
-                await addShaInTxPusher(null)
-                console.log(`finished fileInfos`)
-            })()
-        }
+        tunnelTransform(
+            waitPopper(fileInfos),
+            waitPusher(addShaInTx, 50, 8),
+            async i => {
+                return [
+                    RequestType.AddShaInTx,
+                    i.isDirectory ? '' : await HashTools.hashFile(i.name),
+                    i
+                ] as AddShaInTx
+            }
+        ).then(_ => {
+            console.log(`finished directory parsing`)
+            addShaInTx.push(null)
+        })
 
         let shasToSend = new Queue<{ sha: string; file: FileSpec; offset: number }>('shas-to-send')
         let shaBytes = new Queue<ShaBytes>('sha-bytes')
@@ -149,39 +159,13 @@ function client() {
         {
             (async () => {
                 let popper = waitPopper(shasToSend)
-                let shaBytesPusher = waitPusher(shaBytes, 1000, 500)
 
                 while (true) {
                     let shaToSend = await popper()
 
-                    if (true) {
-                        let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.sha, shaToSend.offset, shaBytes, 200, 150)
-                        await f2q.start()
-                        //console.log(`transferred file  ! ${shaToSend.file.name}`)
-                    }
-                    else {
-                        let offset = shaToSend.offset
-                        const bufferLength = 4096
-
-                        let file = await FsTools.openFile(shaToSend.file.name, 'r')
-
-                        while (offset < shaToSend.file.size) {
-                            let readLength = offset + bufferLength <= shaToSend.file.size ? bufferLength : (shaToSend.file.size - offset)
-
-                            let buffer = await FsTools.readFile(file, offset, readLength)
-
-                            await shaBytesPusher([
-                                RequestType.ShaBytes,
-                                shaToSend.sha,
-                                offset,
-                                buffer
-                            ])
-
-                            offset += readLength
-                        }
-
-                        await FsTools.closeFile(file)
-                    }
+                    let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.sha, shaToSend.offset, shaBytes, 200, 150)
+                    await f2q.start()
+                    //console.log(`transferred file  ! ${shaToSend.file.name}`)
 
                     console.log(`finished push ${shaToSend.file.name}, still ${shasToSend.size()} to do, ${addShaInTx.size()} sha to add in tx`)
                 }
@@ -209,10 +193,14 @@ function client() {
                         await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
 
                     let rpcRequest = null
-                    if (!shaBytes.empty())
+                    if (!shaBytes.empty()) {
                         rpcRequest = await shaBytes.pop()
-                    else
+                    }
+                    else {
                         rpcRequest = await addShaInTx.pop()
+                        if (!rpcRequest)
+                            console.log(`finished addShaInTx`)
+                    }
 
                     if (!rpcRequest) {
                         nbToFinish--

@@ -131,7 +131,7 @@ export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
     }
 }
 
-export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: number) {
+export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: number): Pusher<T> {
     return async (data: T) => {
         return await waitAndPush(q, data, high, low)
     }
@@ -163,5 +163,5 @@ async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number
         })
     }
 
-    await q.push(data)
+    return await q.push(data)
 }
