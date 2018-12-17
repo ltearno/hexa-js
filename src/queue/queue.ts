@@ -36,9 +36,9 @@ export interface QueueWrite<T> {
 
 export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     private queue: QueueItem<T>[] = []
-    private listenersUp: Map<number, QueueListener[]> = new Map()
-    private listenersDown: Map<number, QueueListener[]> = new Map()
-    private listenersLevel: Map<number, QueueListener[]> = new Map()
+    private listenersUp: Map<number, Set<QueueListener>> = new Map()
+    private listenersDown: Map<number, Set<QueueListener>> = new Map()
+    private listenersLevel: Map<number, Set<QueueListener>> = new Map()
 
     private finished: boolean = false
 
@@ -122,7 +122,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 
     addLevelListener(level: number, front: number, listener: QueueListener): ListenerSubscription {
-        let list: Map<Number, QueueListener[]> = null
+        let list: Map<Number, Set<QueueListener>> = null
         if (front < 0)
             list = this.listenersDown
         else if (front > 0)
@@ -130,13 +130,12 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         else
             list = this.listenersLevel
 
-        if (list.has(level))
-            list.get(level).push(listener)
-        else
-            list.set(level, [listener])
+        if (!list.has(level))
+            list.set(level, new Set())
+        list.get(level).add(listener)
 
         return {
-            forget: () => list.set(level, list.get(level).filter(l => l != listener))
+            forget: () => list.get(level).delete(listener)
         }
     }
 
