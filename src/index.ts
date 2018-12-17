@@ -1,5 +1,6 @@
-import { Queue, waitPusher, waitPopper } from './queue/queue'
-import { StreamToQueuePipe, FileStreamToQueuePipe } from './queue/pipe-stream-to-queue'
+import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper } from './queue/queue'
+import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
+import { Readable } from 'stream'
 
 import * as fs from 'fs'
 import * as Tools from './tools'
@@ -74,7 +75,7 @@ function server() {
 
             if (request[0] == RequestType.ShaBytes) {
                 nbBytesReceived += request[3].length
-                console.log(`received bytes ${nbBytesReceived}`)
+                //console.log(`received bytes ${nbBytesReceived}`)
             }
 
             await rpcRxIn.push({
@@ -145,34 +146,34 @@ function client() {
                 while (true) {
                     let shaToSend = await popper()
 
-                    /*let buffers = new Queue<{ offset: number; buffer: Buffer }>('file-buffers')
-                    let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.offset, buffers, 100, 80)
-                    // TODO : launch the buffers reading loop which transform buffers to ShaBytes and send them
-                    await f2q.start()
-                    buffers.finish()*/
-                    // TODO => take in account finish in waiter ?
-
-                    let offset = shaToSend.offset
-                    const bufferLength = 4096
-
-                    let file = await FsTools.openFile(shaToSend.file.name, 'r')
-
-                    while (offset < shaToSend.file.size) {
-                        let readLength = offset + bufferLength <= shaToSend.file.size ? bufferLength : (shaToSend.file.size - offset)
-
-                        let buffer = await FsTools.readFile(file, offset, readLength)
-
-                        await shaBytesPusher([
-                            RequestType.ShaBytes,
-                            shaToSend.sha,
-                            offset,
-                            buffer
-                        ])
-
-                        offset += readLength
+                    if (true) {
+                        let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.sha, shaToSend.offset, shaBytes, 200, 150)
+                        await f2q.start()
+                        //console.log(`transferred file  ! ${shaToSend.file.name}`)
                     }
+                    else {
+                        let offset = shaToSend.offset
+                        const bufferLength = 4096
 
-                    await FsTools.closeFile(file)
+                        let file = await FsTools.openFile(shaToSend.file.name, 'r')
+
+                        while (offset < shaToSend.file.size) {
+                            let readLength = offset + bufferLength <= shaToSend.file.size ? bufferLength : (shaToSend.file.size - offset)
+
+                            let buffer = await FsTools.readFile(file, offset, readLength)
+
+                            await shaBytesPusher([
+                                RequestType.ShaBytes,
+                                shaToSend.sha,
+                                offset,
+                                buffer
+                            ])
+
+                            offset += readLength
+                        }
+
+                        await FsTools.closeFile(file)
+                    }
 
                     console.log(`finished push ${shaToSend.file.name}, still ${shasToSend.size()} to do, ${addShaInTx.size()} sha to add in tx`)
                 }
@@ -237,3 +238,48 @@ async function run() {
 }
 
 run()
+
+
+class FileStreamToQueuePipe {
+    private s: Readable
+
+    constructor(path: string, private sha: string, private offset: number, private q: QueueWrite<ShaBytes> & QueueMng, high: number = 10, low: number = 5) {
+        this.s = fs.createReadStream(path, { flags: 'r', autoClose: true, start: offset, encoding: null })
+
+        let paused = false
+
+        // queue has too much items => pause inputs
+        q.addLevelListener(high, 1, () => {
+            //console.log(`pause inputs`)
+            paused = true
+            this.s.pause()
+        })
+
+        // queue has low items => resume inputs
+        q.addLevelListener(low, -1, () => {
+            //console.log(`resume reading`)
+            if (paused)
+                this.s.resume()
+        })
+    }
+
+    start(): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.s.on('data', chunk => {
+                let offset = this.offset
+                this.offset += chunk.length
+                this.q.push([
+                    RequestType.ShaBytes,
+                    this.sha,
+                    offset,
+                    chunk as Buffer
+                ])
+            }).on('end', () => {
+                resolve(true)
+            }).on('error', (err) => {
+                console.log(`stream error ${err}`)
+                reject(err)
+            })
+        })
+    }
+}
