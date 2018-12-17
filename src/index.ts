@@ -155,13 +155,13 @@ function client() {
         {
             (async () => {
                 let popper = waitPopper(shasToSend)
-                let shaBytesPusher = waitPusher(shaBytes, 20, 10)
+                let shaBytesPusher = waitPusher(shaBytes, 1000, 500)
 
                 while (true) {
                     let shaToSend = await popper()
 
                     let offset = shaToSend.offset
-                    const bufferLength = 4096 * 1024
+                    const bufferLength = 4096
 
                     let file = await FsTools.openFile(shaToSend.file.name, 'r')
 
