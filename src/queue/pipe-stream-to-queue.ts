@@ -18,16 +18,18 @@ export class StreamToQueuePipe<T> {
         })
     }
 
-    start() {
-        let c = 1
-        this.s.on('data', chunk => {
-            IS_DEBUG && console.log(`stream data rx ${c}`)
-            this.q.push((chunk as any) as T)
-        }).on('end', () => {
-            IS_DEBUG && console.log(`stream end`)
-            this.q.finish()
-        }).on('error', (err) => {
-            IS_DEBUG && console.log(`stream error ${err}`)
+    start(): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.s.on('data', chunk => {
+                IS_DEBUG && console.log(`stream data rx`)
+                this.q.push((chunk as any) as T)
+            }).on('end', () => {
+                IS_DEBUG && console.log(`stream end`)
+                resolve(true)
+            }).on('error', (err) => {
+                IS_DEBUG && console.log(`stream error ${err}`)
+                reject(err)
+            })
         })
     }
 }

@@ -1,11 +1,13 @@
-import { Queue, waitPusher, waitPopper, QueueRead } from './queue/queue'
+import { Queue, waitPusher, waitPopper, waitForSomethingAvailable } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 
+import * as fs from 'fs'
 import * as Tools from './tools'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'
 import * as HashTools from './hash-tools'
+import * as FsTools from './FsTools'
 
 enum RequestType {
     AddShaInTx = 0,
@@ -52,7 +54,7 @@ function directPusher<T>(q: Queue<T>) {
     }
 }
 
-type RpcQuery = AddShaInTx
+type RpcQuery = AddShaInTx | ShaBytes
 
 interface RpcReply {
 }
@@ -81,15 +83,19 @@ function server() {
         })
 
         let requestToProcessWaiter = waitPopper(rpcRxOut)
+        let nbBytesReceived = 0
         while (true) {
             let { id, request } = await requestToProcessWaiter()
 
-            console.log(`process RPC request...`)
+            if (request.type == RequestType.ShaBytes) {
+                nbBytesReceived += request.buffer.data.length
+                console.log(`received bytes ${nbBytesReceived}`)
+            }
+
             await rpcRxIn.push({
                 id: id,
                 reply: { length: 0 }
             })
-            console.log(`processed RPC request`)
         }
     })
 }
@@ -114,13 +120,6 @@ function client() {
 
 
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
-
-        /*let inputStream = fs.createReadStream('../blockchain-js/blockchain-js-ui/dist/main.3c6f510d5841f58101ea.js', {
-            flags: 'r',
-            encoding: null,
-            start: 0,
-            autoClose: true
-        })*/
 
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
         let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
@@ -161,23 +160,56 @@ function client() {
                 while (true) {
                     let shaToSend = await popper()
 
-                    //TODO
-                    // open stream at offset
-                    // await a stream to queue pipe (check termination ok)
+                    let offset = shaToSend.offset
+                    const bufferLength = 4096 * 1024
 
-                    await rpcTxPusher(rpcRequest)
+                    let file = await FsTools.openFile(shaToSend.file.name, 'r')
+
+                    while (offset < shaToSend.file.size) {
+                        let readLength = offset + bufferLength <= shaToSend.file.size ? bufferLength : (shaToSend.file.size - offset)
+
+                        let buffer = await FsTools.readFile(file, offset, readLength)
+
+                        await rpcTxPusher({
+                            type: RequestType.ShaBytes,
+                            sha: shaToSend.sha,
+                            buffer,
+                            offset
+                        })
+
+                        offset += readLength
+                    }
+
+                    await FsTools.closeFile(file)
+
+                    console.log(`finished push ${shaToSend.file.name}`)
                 }
             })()
         }
 
         {
             (async () => {
-                // TODO choose source between addShaInTx, shaBytes, rpcCalls, etc...
-                let popper = waitPopper(addShaInTx)
                 let rpcTxPusher = waitPusher(rpcTxIn, 20, 10)
 
+                let waitForQueue = async <T>(q: Queue<T>): Promise<void> => {
+                    if (q.empty()) {
+                        await new Promise(resolve => {
+                            let l = q.addLevelListener(1, 1, async () => {
+                                l.forget()
+                                resolve()
+                            })
+                        })
+                    }
+                }
+
                 while (true) {
-                    let rpcRequest = await popper()
+                    await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
+
+                    let rpcRequest = null
+                    if (!shaBytes.empty())
+                        rpcRequest = await shaBytes.pop()
+                    else
+                        rpcRequest = await addShaInTx.pop()
 
                     await rpcTxPusher(rpcRequest)
                 }
@@ -197,7 +229,7 @@ function client() {
                             await shasToSendPusher({ sha: request.sha, file: request.file, offset: remoteLength })
                         }
                     }
-                    console.log(`received rpc reply ${JSON.stringify(reply)} ${JSON.stringify(request)}`)
+                    //console.log(`received rpc reply ${JSON.stringify(request.type)} ${JSON.stringify(reply)}`)
                 }
             })()
         }
