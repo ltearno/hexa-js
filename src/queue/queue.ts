@@ -24,12 +24,12 @@ export type Pusher<T> = (value: T) => Promise<boolean>
 export interface QueueRead<T> {
     name?: string
     isFinished(): boolean
-    pop: Popper<T>
+    pop(): T
 }
 
 export interface QueueWrite<T> {
     name?: string
-    push: Pusher<T>
+    push(value: T): boolean
     finish()
     size(): number
 }
@@ -63,7 +63,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         return this.queue.length
     }
 
-    async push(data: T): Promise<boolean> {
+    push(data: T): boolean {
         this.queue.push({ data })
 
         IS_DEBUG && this.displayState('push')
@@ -83,7 +83,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         return true
     }
 
-    async pop(): Promise<T> {
+    pop(): T {
         const result = this.queue.shift().data
         this.updateAfterPop()
         return result
@@ -106,7 +106,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     }
 
     async popFilter(filter: (item: T) => boolean): Promise<T> {
-        const resultIndex = this.queue.map(queueItem=>queueItem.data).findIndex(filter)
+        const resultIndex = this.queue.map(queueItem => queueItem.data).findIndex(filter)
         if (resultIndex < 0)
             throw 'nout found item when popFilter'
 

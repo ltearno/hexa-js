@@ -1,4 +1,4 @@
-import { Queue, waitPusher, waitPopper, waitForSomethingAvailable } from './queue/queue'
+import { Queue, waitPusher, waitPopper } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 
 import * as fs from 'fs'
