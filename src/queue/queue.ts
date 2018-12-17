@@ -23,14 +23,12 @@ export type Pusher<T> = (value: T) => Promise<boolean>
 
 export interface QueueRead<T> {
     name?: string
-    isFinished(): boolean
     pop(): T
 }
 
 export interface QueueWrite<T> {
     name?: string
     push(value: T): boolean
-    finish()
     size(): number
 }
 
@@ -40,32 +38,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     private listenersDown: Map<number, Set<QueueListener>> = new Map()
     private listenersLevel: Map<number, Set<QueueListener>> = new Map()
 
-    private finished: boolean = false
-
     constructor(public name: string) { }
-
-    finish() {
-        if (this.empty()) {
-            this.finished = true
-            this.notifyFinish()
-        }
-        else {
-            let s = this.addLevelListener(0, -1, () => {
-                s.forget()
-                this.finished = true
-                this.notifyFinish()
-            })
-        }
-    }
-
-    private notifyFinish() {
-        this.listenersFinish.forEach(listener => listener())
-        this.listenersFinish.clear()
-    }
-
-    isFinished() {
-        return this.finished
-    }
 
     size() {
         return this.queue.length
@@ -144,16 +117,6 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
 
         return {
             forget: () => list.get(level).delete(listener)
-        }
-    }
-
-    private listenersFinish = new Set<QueueListener>()
-
-    addFinishListener(listener: QueueListener): ListenerSubscription {
-        this.listenersFinish.add(listener)
-
-        return {
-            forget: () => this.listenersFinish.delete(listener)
         }
     }
 

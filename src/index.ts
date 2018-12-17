@@ -38,7 +38,7 @@ queues :
 
 function directPusher<T>(q: Queue<T>) {
     return async (data: T) => {
-        return await q.push(data)
+        return q.push(data)
     }
 }
 
@@ -121,9 +121,6 @@ function client() {
                 let addShaInTxPusher = waitPusher(addShaInTx, 50, 8)
 
                 while (true) {
-                    if (fileInfos.isFinished())
-                        break
-
                     let fileInfo = await popper()
 
                     await addShaInTxPusher([
