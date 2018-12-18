@@ -53,8 +53,6 @@ async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher: Pusher
 
         await addShaInTxPusher(transformed)
     }
-
-    await addShaInTxPusher(null)
 }
 
 type RpcQuery = AddShaInTx | ShaBytes
@@ -125,7 +123,7 @@ function client() {
 
 
 
-        let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
+        let directoryLister = new DirectoryLister.DirectoryLister('./dist', () => null)
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
 
         {
@@ -187,29 +185,25 @@ function client() {
                     }
                 }
 
-                let nbToFinish = 2
-                while (true) {
-                    if (shaBytes.empty() && addShaInTx.empty())
-                        await Promise.race([waitForQueue(shaBytes), waitForQueue(addShaInTx)])
+                let sourceQueues: Queue<RpcQuery>[] = [shaBytes, addShaInTx]
+                while (sourceQueues.length) {
+                    if (sourceQueues.every(source => source.empty()))
+                        await Promise.race(sourceQueues.map(source => waitForQueue(source)))
 
                     let rpcRequest = null
-                    if (!shaBytes.empty()) {
-                        rpcRequest = await shaBytes.pop()
-                    }
-                    else {
-                        rpcRequest = await addShaInTx.pop()
-                        if (!rpcRequest)
-                            console.log(`finished addShaInTx`)
+                    for (let i = 0; i < sourceQueues.length; i++) {
+                        if (!sourceQueues[i].empty()) {
+                            rpcRequest = await sourceQueues[i].pop()
+                            if (!rpcRequest) {
+                                console.log(`finished source ${sourceQueues[i].name}`)
+                                sourceQueues.splice(i, 1)
+                            }
+                            break
+                        }
                     }
 
-                    if (!rpcRequest) {
-                        nbToFinish--
-                        if (!nbToFinish)
-                            break
-                    }
-                    else {
+                    if (rpcRequest)
                         await rpcTxPusher(rpcRequest)
-                    }
                 }
 
                 console.log(`finished rpcPush`)
