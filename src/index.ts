@@ -81,6 +81,12 @@ function server() {
             rpcRxOut.push(null)
         })
 
+        let rpcServer = {
+            test: async (a: number) => {
+                return a * 2
+            }
+        }
+
         await tunnelTransform(
             waitPopper(rpcRxOut),
             directPusher(rpcRxIn),
@@ -101,9 +107,15 @@ function server() {
                         }
 
                     case RequestType.Call:
+                        request.shift()
+                        let methodName = request.shift()
+                        let args = request
+
+                        let result = await rpcServer[methodName](...args)
+
                         return {
                             id,
-                            reply: ['rpc !?']
+                            reply: result
                         }
                 }
             })
@@ -129,12 +141,40 @@ function client() {
 
 
         let rpcCalls = new Queue<RpcCall>('rpc-calls')
+
+        let rpcResolvers = new Map<RpcCall, (value: any) => void>()
+        function callRpc(rpcCall: RpcCall): Promise<any> {
+            return new Promise((resolve) => {
+                rpcResolvers.set(rpcCall, resolve)
+                rpcCalls.push(rpcCall)
+            })
+        }
+
+        function createProxy<T>(): T {
+            return <T>new Proxy({}, {
+                get(target, propKey, receiver) {
+                    return async (...args) => {
+                        args = args.slice()
+                        args.unshift(propKey)
+                        args.unshift(RequestType.Call)
+
+                        return await callRpc(args as RpcCall)
+                    };
+                }
+            });
+        }
+
+        let prox = createProxy<{
+            test(a: number): Promise<number>
+        }>()
+
+
         let nbRpcCalls = 100
         setInterval(async () => {
             nbRpcCalls--
             if (nbRpcCalls > 0) {
                 console.log(`call rpc`)
-                let res = await callRpc()
+                let res = await prox.test(nbRpcCalls)
                 console.log(`rpc result: ${res}`)
             }
             else if (nbRpcCalls == 0) {
@@ -142,14 +182,8 @@ function client() {
             }
         }, 1000)
 
-        let rpcResolvers = new Map<RpcCall, (value: any) => void>()
-        function callRpc(): Promise<any> {
-            return new Promise((resolve) => {
-                let rpcCall: RpcCall = [RequestType.Call, 'method', 1, 2, 3]
-                rpcResolvers.set(rpcCall, resolve)
-                rpcCalls.push(rpcCall)
-            })
-        }
+
+
 
 
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
