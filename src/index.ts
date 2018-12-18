@@ -123,7 +123,7 @@ function client() {
 
 
 
-        let directoryLister = new DirectoryLister.DirectoryLister('./dist', () => null)
+        let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
 
         {
@@ -169,7 +169,7 @@ function client() {
                     await f2q.start()
                     //console.log(`transferred file  ! ${shaToSend.file.name}`)
 
-                    console.log(`finished push ${shaToSend.file.name}, still ${shasToSend.size()} to do, ${addShaInTx.size()} sha to add in tx`)
+                    console.log(`finished push ${shaToSend.file.name}`)
                 }
 
                 console.log(`finished shasToSend`)
