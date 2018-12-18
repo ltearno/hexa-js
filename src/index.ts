@@ -12,7 +12,8 @@ import * as FsTools from './FsTools'
 
 enum RequestType {
     AddShaInTx = 0,
-    ShaBytes = 1
+    ShaBytes = 1,
+    Call = 2
 }
 
 interface FileSpec {
@@ -25,7 +26,7 @@ interface FileSpec {
 type AddShaInTx = [RequestType.AddShaInTx, string, FileSpec] // type, sha, file
 type AddShaInTxReply = [number] // length
 type ShaBytes = [RequestType.ShaBytes, string, number, Buffer] // type, sha, offset, buffer
-
+type RpcCall = [RequestType.Call, string, ...any[]]
 /*
 
 queues :
@@ -55,7 +56,7 @@ async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher: Pusher
     }
 }
 
-type RpcQuery = AddShaInTx | ShaBytes
+type RpcQuery = AddShaInTx | ShaBytes | RpcCall
 type RpcReply = any[]
 
 function server() {
@@ -87,16 +88,24 @@ function server() {
             async (p: { id: string; request: RpcQuery }) => {
                 let { id, request } = p
 
-                if (request[0] == RequestType.ShaBytes) {
-                    return {
-                        id,
-                        reply: ['ok written']
-                    }
-                }
+                switch (request[0]) {
+                    case RequestType.AddShaInTx:
+                        return {
+                            id,
+                            reply: [0]
+                        }
 
-                return {
-                    id,
-                    reply: [0]
+                    case RequestType.ShaBytes:
+                        return {
+                            id,
+                            reply: ['ok written']
+                        }
+
+                    case RequestType.Call:
+                        return {
+                            id,
+                            reply: ['rpc !?']
+                        }
                 }
             })
 
@@ -120,7 +129,15 @@ function client() {
 
 
 
-
+        let rpcCalls = new Queue<RpcCall>('rpc-calls')
+        let nbRpcCalls = 100
+        setInterval(async () => {
+            nbRpcCalls--
+            if (nbRpcCalls > 0)
+                rpcCalls.push([RequestType.Call, 'hello', 0, 'uyt'])
+            else if (nbRpcCalls == 0)
+                rpcCalls.push(null)
+        }, 1000)
 
 
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
@@ -193,6 +210,7 @@ function client() {
                 }
 
                 let sourceQueues: Queue<RpcQuery>[] = [
+                    rpcCalls,
                     shaBytes,
                     addShaInTx
                 ]
@@ -238,15 +256,26 @@ function client() {
                         break
 
                     let { request, reply } = rpcItem
-                    if (request[0] == RequestType.AddShaInTx) {
-                        let remoteLength = (reply as AddShaInTxReply).length
-                        if (!request[2].isDirectory && remoteLength < request[2].size) {
-                            await shasToSendPusher({ sha: request[1], file: request[2], offset: remoteLength })
+                    switch (request[0]) {
+                        case RequestType.AddShaInTx: {
+                            let remoteLength = (reply as AddShaInTxReply).length
+                            if (!request[2].isDirectory && remoteLength < request[2].size) {
+                                await shasToSendPusher({ sha: request[1], file: request[2], offset: remoteLength })
+                            }
+
+                            nbAddShaInTxInTransport--
+                            if (!nbAddShaInTxInTransport && closedAddShaInTx)
+                                await shasToSendPusher(null)
+
+                            break
                         }
 
-                        nbAddShaInTxInTransport--
-                        if (!nbAddShaInTxInTransport && closedAddShaInTx)
-                            await shasToSendPusher(null)
+                        case RequestType.ShaBytes:
+                            break
+
+                        case RequestType.Call:
+                            console.log(`call reply ${JSON.stringify(reply)}`)
+                            break
                     }
                     //console.log(`received rpc reply ${JSON.stringify(request.type)} ${JSON.stringify(reply)}`)
                 }
