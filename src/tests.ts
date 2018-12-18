@@ -3,7 +3,7 @@ import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
 import * as fs from 'fs'
-import * as Tools from './tools'
+import * as Tools from './express-tools'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'

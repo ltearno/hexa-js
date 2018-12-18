@@ -1,7 +1,7 @@
 import * as Queue from './queue/queue'
 import * as NetworkApi from './network-api'
 import * as Serialisation from './serialisation'
-import * as TestTools from './test-tools'
+import * as TestTools from './tools'
 
 const TYPE_REQUEST = 0
 const TYPE_REPLY = 1
