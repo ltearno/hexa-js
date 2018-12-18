@@ -1,7 +1,15 @@
 import * as express from 'express'
 import * as bodyParser from 'body-parser'
 
-export function createExpressApp(port: number) {
+declare function ws(this: express.Server, url: string, callback: any)
+
+declare module "express" {
+    interface Server {
+        ws(url: string, callback: any)
+    }
+}
+
+export function createExpressApp(port: number): express.Server {
     let app = express()
 
     require('express-ws')(app)
