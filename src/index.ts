@@ -133,11 +133,24 @@ function client() {
         let nbRpcCalls = 100
         setInterval(async () => {
             nbRpcCalls--
-            if (nbRpcCalls > 0)
-                rpcCalls.push([RequestType.Call, 'hello', 0, 'uyt'])
-            else if (nbRpcCalls == 0)
+            if (nbRpcCalls > 0) {
+                console.log(`call rpc`)
+                let res = await callRpc()
+                console.log(`rpc result: ${res}`)
+            }
+            else if (nbRpcCalls == 0) {
                 rpcCalls.push(null)
+            }
         }, 1000)
+
+        let rpcResolvers = new Map<RpcCall, (value: any) => void>()
+        function callRpc(): Promise<any> {
+            return new Promise((resolve) => {
+                let rpcCall: RpcCall = [RequestType.Call, 'method', 1, 2, 3]
+                rpcResolvers.set(rpcCall, resolve)
+                rpcCalls.push(rpcCall)
+            })
+        }
 
 
         let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
@@ -274,7 +287,7 @@ function client() {
                             break
 
                         case RequestType.Call:
-                            console.log(`call reply ${JSON.stringify(reply)}`)
+                            rpcResolvers.get(request)(reply)
                             break
                     }
                     //console.log(`received rpc reply ${JSON.stringify(request.type)} ${JSON.stringify(reply)}`)
