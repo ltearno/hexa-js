@@ -9,6 +9,16 @@ import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'
 import * as HashTools from './hash-tools'
 
+/**
+ * TODO
+ * 
+ * merge RequestType and method name
+ * and always call a method on server implementation
+ * 
+ * calling rpcProxy and pushing a call message are just two ways for the same
+ * thing
+ */
+
 enum RequestType {
     AddShaInTx = 0,
     ShaBytes = 1,
