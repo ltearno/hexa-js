@@ -23,6 +23,8 @@ export class Transport<Request extends any[], Reply extends any[]> {
 
     private rcvQueue = new Queue.Queue<Buffer>('rcv')
 
+    private finishedTx = false
+
     // main loop
     async start() {
         this.ws.on('message', message => {
@@ -45,6 +47,9 @@ export class Transport<Request extends any[], Reply extends any[]> {
                         case TYPE_REPLY:
                             let item = await this.networkQueue.popFilter(item => item.messageId == messageId)
                             await this.txout({ request: item.request, reply: data as Reply })
+
+                            if (this.finishedTx && this.networkQueue.empty())
+                                await this.txout(null)
                             break
 
                         default:
@@ -67,11 +72,16 @@ export class Transport<Request extends any[], Reply extends any[]> {
             (async () => {
                 while (true) {
                     let request = await this.txin()
+                    if (!request)
+                        break
+
                     let messageId = this.nextMessageBase + (this.nextMessageId++)
 
                     await this.networkQueuePusher({ messageId, request })
                     this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId].concat(request)))
                 }
+
+                this.finishedTx = true
             })()
         }
     }

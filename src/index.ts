@@ -135,6 +135,8 @@ function client() {
         }
 
         let addShaInTx = new Queue<AddShaInTx>('add-sha-in-tx')
+        let closedAddShaInTx = false
+        let nbAddShaInTxInTransport = 0
 
         tunnelTransform(
             waitPopper(fileInfos),
@@ -160,6 +162,8 @@ function client() {
 
                 while (true) {
                     let shaToSend = await popper()
+                    if (!shaToSend)
+                        break
 
                     let f2q = new FileStreamToQueuePipe(shaToSend.file.name, shaToSend.sha, shaToSend.offset, shaBytes, 200, 150)
                     await f2q.start()
@@ -167,6 +171,9 @@ function client() {
 
                     console.log(`finished push ${shaToSend.file.name}, still ${shasToSend.size()} to do, ${addShaInTx.size()} sha to add in tx`)
                 }
+
+                console.log(`finished shasToSend`)
+                shaBytes.push(null)
             })()
         }
 
@@ -185,7 +192,10 @@ function client() {
                     }
                 }
 
-                let sourceQueues: Queue<RpcQuery>[] = [shaBytes, addShaInTx]
+                let sourceQueues: Queue<RpcQuery>[] = [
+                    shaBytes,
+                    addShaInTx
+                ]
                 while (sourceQueues.length) {
                     if (sourceQueues.every(source => source.empty()))
                         await Promise.race(sourceQueues.map(source => waitForQueue(source)))
@@ -195,8 +205,14 @@ function client() {
                         if (!sourceQueues[i].empty()) {
                             rpcRequest = await sourceQueues[i].pop()
                             if (!rpcRequest) {
+                                if (sourceQueues[i] === addShaInTx)
+                                    closedAddShaInTx = true
+
                                 console.log(`finished source ${sourceQueues[i].name}`)
                                 sourceQueues.splice(i, 1)
+                            } else {
+                                if (sourceQueues[i] === addShaInTx)
+                                    nbAddShaInTxInTransport++
                             }
                             break
                         }
@@ -207,6 +223,7 @@ function client() {
                 }
 
                 console.log(`finished rpcPush`)
+                await rpcTxPusher(null)
             })()
         }
 
@@ -216,15 +233,25 @@ function client() {
                 let shasToSendPusher = waitPusher(shasToSend, 20, 10)
 
                 while (true) {
-                    let { request, reply } = await popper()
+                    let rpcItem = await popper()
+                    if (!rpcItem)
+                        break
+
+                    let { request, reply } = rpcItem
                     if (request[0] == RequestType.AddShaInTx) {
                         let remoteLength = (reply as AddShaInTxReply).length
                         if (!request[2].isDirectory && remoteLength < request[2].size) {
                             await shasToSendPusher({ sha: request[1], file: request[2], offset: remoteLength })
                         }
+
+                        nbAddShaInTxInTransport--
+                        if (!nbAddShaInTxInTransport && closedAddShaInTx)
+                            await shasToSendPusher(null)
                     }
                     //console.log(`received rpc reply ${JSON.stringify(request.type)} ${JSON.stringify(reply)}`)
                 }
+
+                console.log(`finished rpcTxOut`)
             })()
         }
     })
