@@ -8,7 +8,6 @@ import * as NetworkApiImpl from './network-api-node-impl'
 import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'
 import * as HashTools from './hash-tools'
-import * as FsTools from './FsTools'
 
 enum RequestType {
     AddShaInTx = 0,
