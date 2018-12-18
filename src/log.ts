@@ -163,7 +163,7 @@ class Logger {
     log(message) { this.output('log', message) }
     dbg(message) { this.output('dbg', message) }
     err(message) { this.output('err', message) }
-    
+
     conf(level: string, show: boolean) { Logger.config[level] = show }
 
     output(level: string, message) {
@@ -211,7 +211,7 @@ class Logger {
     }
 }
 
-export default function LoggerBuilder(id: string): {
+export function buildLogger(id: string): {
     (message): void
 
     log(message): void
