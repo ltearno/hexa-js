@@ -1,4 +1,4 @@
-import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, Popper, Pusher } from './queue/queue'
+import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, directPusher, tunnelTransform } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
@@ -36,35 +36,6 @@ type AddShaInTx = [RequestType.AddShaInTx, string, FileSpec] // type, sha, file
 type AddShaInTxReply = [number] // length
 type ShaBytes = [RequestType.ShaBytes, string, number, Buffer] // type, sha, offset, buffer
 type RpcCall = [RequestType.Call, string, ...any[]]
-/*
-
-queues :
-- list dirs & files => request sha & wait return
-- pour chaque wait return, si envoi nécessaire, enfiler l'info de fichier+offset
-- sha buffers queue (from {file,offset} queue, have always X buffers ready to send on the wire)
-- rpc calls (prioritaires ?) : ouvrir tx, attendre que les queues soient vides, et valider tx puis quitter
-
-*/
-
-function directPusher<T>(q: Queue<T>): Pusher<T> {
-    return async (data: T) => {
-        return q.push(data)
-    }
-}
-
-// extract from one queue, transform, and push to other queue. finish if null is encountered
-async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher: Pusher<D>, t: (i: S) => Promise<D>) {
-    while (true) {
-        let fileInfo = await popper()
-        if (!fileInfo)
-            break
-
-        let transformed = await t(fileInfo)
-
-        await addShaInTxPusher(transformed)
-    }
-}
-
 type RpcQuery = AddShaInTx | ShaBytes | RpcCall
 type RpcReply = any[]
 
@@ -136,7 +107,7 @@ function server() {
 
 function client() {
     let network = new NetworkApiImpl.NetworkApiNodeImpl()
-    let ws = network.createClientWebSocket('ws://localhost:8080/queue')
+    let ws = network.createClientWebSocket('ws://localhost:5005/hexa-backup')
     ws.on('open', async () => {
         console.log('opened ws client, go !')
 
@@ -345,7 +316,7 @@ function client() {
 }
 
 async function run() {
-    server()
+    //server()
     client()
 }
 

@@ -2,9 +2,9 @@ import fs = require('fs')
 import fsPath = require('path')
 import * as FsTools from './FsTools'
 import * as Stream from 'stream'
-import Log from './log'
+import * as Log from './log'
 
-const log = Log('DirectoryLister')
+const log = Log.buildLogger('DirectoryLister')
 
 export interface FileIteration {
     name: string
@@ -100,7 +100,7 @@ function* iterateRecursivelyOverDirectory(path: string, stateCallback?: (nbFiles
 export class DirectoryLister extends Stream.Readable {
     private fileIterator: IterableIterator<FileIteration>
 
-    constructor(private path: string, stateCallback?: (nbFiles: number, nbDirs: number, size:number) => void) {
+    constructor(private path: string, stateCallback?: (nbFiles: number, nbDirs: number, size: number) => void) {
         super({ objectMode: true })
 
         this.fileIterator = iterateRecursivelyOverDirectory(path, stateCallback)

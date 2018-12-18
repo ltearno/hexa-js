@@ -9,6 +9,9 @@ import * as OrderedJson from './ordered-json'
 import * as Serialisation from './serialisation'
 import * as ExpressTools from './express-tools'
 import * as Tools from './tools'
+import * as Queue from './queue/queue'
+import * as StreamToQueue from './queue/pipe-stream-to-queue'
+import * as Transport from './network-transport'
 
 export {
     DirectoryLister,
@@ -21,5 +24,8 @@ export {
     OrderedJson,
     Serialisation,
     ExpressTools,
-    Tools
+    Tools,
+    Queue,
+    StreamToQueue,
+    Transport
 }

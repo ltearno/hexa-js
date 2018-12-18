@@ -165,3 +165,22 @@ async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number
 
     return await q.push(data)
 }
+
+export function directPusher<T>(q: Queue<T>): Pusher<T> {
+    return async (data: T) => {
+        return q.push(data)
+    }
+}
+
+// extract from one queue, transform, and push to other queue. finish if null is encountered
+export async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher: Pusher<D>, t: (i: S) => Promise<D>) {
+    while (true) {
+        let fileInfo = await popper()
+        if (!fileInfo)
+            break
+
+        let transformed = await t(fileInfo)
+
+        await addShaInTxPusher(transformed)
+    }
+}
