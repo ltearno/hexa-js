@@ -1,4 +1,4 @@
-import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, directPusher, tunnelTransform } from './queue/queue'
+import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, directPusher, tunnelTransform, Pusher } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
@@ -105,6 +105,42 @@ function server() {
     })
 }
 
+async function multiInOneOutLoop(sourceQueues: { queue: Queue<RpcQuery>; listener: (q: RpcQuery) => void }[], rpcTxPusher: Pusher<RpcQuery>) {
+    let waitForQueue = async <T>(q: Queue<T>): Promise<void> => {
+        if (q.empty()) {
+            await new Promise(resolve => {
+                let l = q.addLevelListener(1, 1, () => {
+                    l.forget()
+                    resolve()
+                })
+            })
+        }
+    }
+
+    while (sourceQueues.length) {
+        if (sourceQueues.every(source => source.queue.empty()))
+            await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
+
+        let rpcRequest = null
+        for (let i = 0; i < sourceQueues.length; i++) {
+            if (!sourceQueues[i].queue.empty()) {
+                rpcRequest = sourceQueues[i].queue.pop()
+                sourceQueues[i].listener(rpcRequest)
+                if (rpcRequest) {
+                    await rpcTxPusher(rpcRequest)
+                }
+                else {
+                    console.log(`finished rpc source ${sourceQueues[i].queue.name}`)
+                    sourceQueues.splice(i, 1)
+                }
+                break
+            }
+        }
+    }
+
+    console.log(`finished rpcPush`)
+}
+
 function client() {
     let network = new NetworkApiImpl.NetworkApiNodeImpl()
     let ws = network.createClientWebSocket('ws://localhost:5005/hexa-backup')
@@ -145,42 +181,27 @@ function client() {
             });
         }
 
-        let prox = createProxy<{
-            test(a: number): Promise<number>
-        }>()
-
-
-        let nbRpcCalls = 100
-        setInterval(async () => {
-            nbRpcCalls--
-            if (nbRpcCalls > 0) {
-                console.log(`call rpc`)
-                let res = await prox.test(nbRpcCalls)
-                console.log(`rpc result: ${res}`)
-            }
-            else if (nbRpcCalls == 0) {
-                rpcCalls.push(null)
-            }
-        }, 1000)
 
 
 
 
-
-        let directoryLister = new DirectoryLister.DirectoryLister('./', () => null)
         let fileInfos = new Queue<DirectoryLister.FileIteration>('fileslist')
 
+        let addShaInTx = new Queue<AddShaInTx>('add-sha-in-tx')
+        let closedAddShaInTx = false
+        let nbAddShaInTxInTransport = 0
+
+        let shasToSend = new Queue<{ sha: string; file: FileSpec; offset: number }>('shas-to-send')
+        let shaBytes = new Queue<ShaBytes>('sha-bytes')
+
         {
+            let directoryLister = new DirectoryLister.DirectoryLister('./', () => null);
             (async () => {
                 let s2q1 = new StreamToQueuePipe(directoryLister, fileInfos, 50, 10)
                 await s2q1.start()
                 fileInfos.push(null)
             })()
         }
-
-        let addShaInTx = new Queue<AddShaInTx>('add-sha-in-tx')
-        let closedAddShaInTx = false
-        let nbAddShaInTxInTransport = 0
 
         tunnelTransform(
             waitPopper(fileInfos),
@@ -196,9 +217,6 @@ function client() {
             console.log(`finished directory parsing`)
             addShaInTx.push(null)
         })
-
-        let shasToSend = new Queue<{ sha: string; file: FileSpec; offset: number }>('shas-to-send')
-        let shaBytes = new Queue<ShaBytes>('sha-bytes')
 
         {
             (async () => {
@@ -221,55 +239,24 @@ function client() {
             })()
         }
 
+
+        // RPC thing
+
         {
-            (async () => {
-                let rpcTxPusher = waitPusher(rpcTxIn, 20, 10)
+            let rpcTxPusher = waitPusher(rpcTxIn, 20, 10)
 
-                let waitForQueue = async <T>(q: Queue<T>): Promise<void> => {
-                    if (q.empty()) {
-                        await new Promise(resolve => {
-                            let l = q.addLevelListener(1, 1, () => {
-                                l.forget()
-                                resolve()
-                            })
-                        })
+            multiInOneOutLoop([
+                { queue: rpcCalls, listener: (q) => 4 },
+                { queue: shaBytes, listener: q => null },
+                {
+                    queue: addShaInTx, listener: q => {
+                        if (q)
+                            nbAddShaInTxInTransport++
+                        else
+                            closedAddShaInTx = true
                     }
                 }
-
-                let sourceQueues: Queue<RpcQuery>[] = [
-                    rpcCalls,
-                    shaBytes,
-                    addShaInTx
-                ]
-                while (sourceQueues.length) {
-                    if (sourceQueues.every(source => source.empty()))
-                        await Promise.race(sourceQueues.map(source => waitForQueue(source)))
-
-                    let rpcRequest = null
-                    for (let i = 0; i < sourceQueues.length; i++) {
-                        if (!sourceQueues[i].empty()) {
-                            rpcRequest = await sourceQueues[i].pop()
-                            if (!rpcRequest) {
-                                if (sourceQueues[i] === addShaInTx)
-                                    closedAddShaInTx = true
-
-                                console.log(`finished source ${sourceQueues[i].name}`)
-                                sourceQueues.splice(i, 1)
-                            } else {
-                                if (sourceQueues[i] === addShaInTx)
-                                    nbAddShaInTxInTransport++
-                            }
-                            break
-                        }
-                    }
-
-                    if (rpcRequest)
-                        await rpcTxPusher(rpcRequest)
-                }
-
-                console.log(`finished rpcPush`)
-                await rpcTxPusher(null)
-            })()
+            ], rpcTxPusher).then(_ => rpcTxPusher(null))
         }
 
         {
