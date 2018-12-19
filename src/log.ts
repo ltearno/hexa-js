@@ -147,6 +147,7 @@ class Logger {
     private static config = {
         'log': true,
         'dbg': false,
+        'wrn': true,
         'err': true
     };
 
@@ -162,6 +163,7 @@ class Logger {
 
     log(message) { this.output('log', message) }
     dbg(message) { this.output('dbg', message) }
+    wrn(message) { this.output('wrn', message) }
     err(message) { this.output('err', message) }
 
     conf(level: string, show: boolean) { Logger.config[level] = show }
@@ -216,6 +218,7 @@ export function buildLogger(id: string): {
 
     log(message): void
     dbg(message): void
+    wrn(message): void
     err(message): void
     output(level, message): void
 
@@ -229,6 +232,7 @@ export function buildLogger(id: string): {
     loggerFunction.log = (message) => logger.log(message)
     loggerFunction.dbg = (message) => logger.dbg(message)
     loggerFunction.err = (message) => logger.err(message)
+    loggerFunction.wrn = (message) => logger.wrn(message)
     loggerFunction.conf = (level, show) => logger.conf(level, show)
     loggerFunction.output = (level, message) => logger.output(level, message)
     loggerFunction.setStatus = (callback) => logger.setStatus(callback)

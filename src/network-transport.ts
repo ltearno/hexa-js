@@ -63,7 +63,6 @@ export class Transport<Request extends any[], Reply extends any[]> {
             (async () => {
                 while (true) {
                     let { id, reply } = await this.rxin()
-                    console.log(`sendingback ${JSON.stringify(reply)}`)
                     this.ws.send(Serialisation.serialize([TYPE_REPLY, id, reply]))
                 }
             })()
