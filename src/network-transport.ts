@@ -19,7 +19,7 @@ export class Transport<Request extends any[], Reply extends any[]> {
     private nextMessageId = 1
 
     private networkQueue = new Queue.Queue<{ messageId: string; request: Request }>('network')
-    private networkQueuePusher = Queue.waitPusher(this.networkQueue, 50, 40)
+    private networkQueuePusher = Queue.waitPusher(this.networkQueue, 100, 60)
 
     private rcvQueue = new Queue.Queue<Buffer>('rcv')
 
@@ -63,7 +63,12 @@ export class Transport<Request extends any[], Reply extends any[]> {
             (async () => {
                 while (true) {
                     let { id, reply } = await this.rxin()
-                    this.ws.send(Serialisation.serialize([TYPE_REPLY, id, reply]))
+                    try {
+                        this.ws.send(Serialisation.serialize([TYPE_REPLY, id, reply]))
+                    }
+                    catch (err) {
+                        //console.warn(`error sending on ws, will probably close soon`)
+                    }
                 }
             })()
         }
@@ -78,7 +83,12 @@ export class Transport<Request extends any[], Reply extends any[]> {
                     let messageId = this.nextMessageBase + (this.nextMessageId++)
 
                     await this.networkQueuePusher({ messageId, request })
-                    this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId].concat(request)))
+                    try {
+                        this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId].concat(request)))
+                    }
+                    catch (err) {
+                        //console.warn(`error sending on ws, will probably close soon`)
+                    }
                 }
 
                 this.finishedTx = true
