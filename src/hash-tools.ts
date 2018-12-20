@@ -9,6 +9,7 @@
 
 let hash = require('hash.js')
 let cryptojs = require('crypto-js')
+import * as crypto from 'crypto'
 import * as forge from 'node-forge'
 import * as OrderedJson from './ordered-json'
 import * as FsTools from './FsTools'
@@ -22,9 +23,7 @@ export function sameObjects(a, b) {
 export const EMPTY_PAYLOAD_SHA = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 
 export async function hashString(value: string): Promise<string> {
-    var md = forge.md.sha256.create();
-    md.update(value);
-    return md.digest().toHex()
+    return hashStringSync(value)
 }
 
 export function hashStringSync(value: string): string {
@@ -35,12 +34,15 @@ export function hashStringSync(value: string): string {
 
 export function hashStream(input: Stream.Readable): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-        let hash = forge.md.sha256.create()
+        // be careful, forge does not work on Buffer data, only on strings
+        //let hash = forge.md.sha256.create()        
+        let hash = crypto.createHash('sha256')
 
         input.on('data', chunk => {
             hash.update(chunk)
         }).on('end', () => {
-            resolve(hash.digest().toHex())
+            //resolve(hash.digest().toHex())
+            resolve(hash.digest('hex'))
         }).on('error', (err) => {
             reject(err);
         });
@@ -56,8 +58,6 @@ export async function hashFile(fileName: string): Promise<string> {
         let input = fs.createReadStream(fileName)
 
         let sha = await hashStream(input)
-
-        console.log(`hashFile ${sha} ${fileName}`)
 
         return sha
     }

@@ -19,7 +19,7 @@ export class Transport<Request extends any[], Reply extends any[]> {
     private nextMessageId = 1
 
     private networkQueue = new Queue.Queue<{ messageId: string; request: Request }>('network')
-    private networkQueuePusher = Queue.waitPusher(this.networkQueue, 100, 60)
+    private networkQueuePusher = Queue.waitPusher(this.networkQueue, 20, 15)
 
     private rcvQueue = new Queue.Queue<Buffer>('rcv')
 
