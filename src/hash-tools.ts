@@ -57,6 +57,8 @@ export async function hashFile(fileName: string): Promise<string> {
 
         let sha = await hashStream(input)
 
+        console.log(`hashFile ${sha} ${fileName}`)
+
         return sha
     }
     catch (error) {

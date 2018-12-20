@@ -73,7 +73,7 @@ class Term {
     }
 
     print() {
-        process.stdout.write(new Buffer(this.stack.join(''), 'utf8'))
+        process.stdout.write(Buffer.from(this.stack.join(''), 'utf8'))
     }
 }
 

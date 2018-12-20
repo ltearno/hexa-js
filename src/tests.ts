@@ -304,7 +304,14 @@ function client() {
 
 async function run() {
     //server()
-    client()
+    //client()
+
+    let h = await HashTools.hashString('toto')
+    let hh = await HashTools.hashString(Buffer.from('toto') as string)
+
+    let p = `/home/arnaud/Téléchargements/0c_4.-_3.wav`
+    let sha = await HashTools.hashFile(p)
+    console.log(`${sha}`)
 }
 
 run()

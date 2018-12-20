@@ -41,7 +41,7 @@ export function openFile(fileName: string, flags: string) {
 
 export function readFile(fd: number, offset: number, length: number) {
     return new Promise<Buffer>((resolve, reject) => {
-        let buffer = new Buffer(length);
+        let buffer = Buffer.alloc(length)
 
         fs.read(fd, buffer, 0, length, offset, (err, bytesRead, buffer) => {
             if (err || bytesRead != length)
