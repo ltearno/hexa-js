@@ -310,7 +310,7 @@ async function run() {
     let hh = await HashTools.hashString(Buffer.from('toto') as string)
     console.log(`toto : ${h} ${hh}`)
 
-    let p = `/home/arnaud/Téléchargements/0c_4.-_3.wav`
+    let p = `/home/arnaud/Téléchargements/source-code-pro-2.030R-ro-1.050R-it.zip`
     let sha = await HashTools.hashFile(p)
     console.log(`${sha}`)
 }
