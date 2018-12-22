@@ -1,4 +1,17 @@
 const IS_DEBUG = false
+const IS_DIAGNOSTICS = true
+
+const weakQueuesList = new Set<Queue<any>>()
+if (IS_DIAGNOSTICS) {
+    setInterval(() => {
+        console.log(`#### QUEUES DIAGNOSTIC`)
+        console.log(`${weakQueuesList.size} queues`)
+        weakQueuesList.forEach(queue=>{
+            console.log(`- ${queue.name}: ${queue.size()}`)
+        })
+        console.log(`####`)
+    }, 5000)
+}
 
 export interface QueueItem<T> {
     data: T
@@ -38,7 +51,10 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     private listenersDown: Map<number, Set<QueueListener>> = new Map()
     private listenersLevel: Map<number, Set<QueueListener>> = new Map()
 
-    constructor(public name: string) { }
+    constructor(public name: string) {
+        if (IS_DIAGNOSTICS)
+            weakQueuesList.add(this)
+    }
 
     size() {
         return this.queue.length
@@ -67,6 +83,10 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     pop(): T {
         const result = this.queue.shift().data
         this.updateAfterPop()
+
+        if (IS_DIAGNOSTICS && !result)
+            weakQueuesList.delete(this)
+
         return result
     }
 

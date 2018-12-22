@@ -12,13 +12,15 @@ export class Transport<Request extends any[], Reply extends any[]> {
         private txout: Queue.Pusher<{ request: Request; reply: Reply }>,
         private rxout: Queue.Pusher<{ id: string; request: Request }>,
         private rxin: Queue.Popper<{ id: string; reply: Reply }>,
-        private ws: NetworkApi.WebSocket
+        private ws: NetworkApi.WebSocket,
+        private highPendingRequests: number = 20,
+        private lowPendingRequests: number = 15
     ) { }
 
     private nextMessageId = 1
 
     private networkQueue = new Queue.Queue<{ messageId: string; request: Request }>('network')
-    private networkQueuePusher = Queue.waitPusher(this.networkQueue, 20, 15)
+    private networkQueuePusher = Queue.waitPusher(this.networkQueue, this.highPendingRequests, this.lowPendingRequests)
 
     private rcvQueue = new Queue.Queue<Buffer>('rcv')
 
