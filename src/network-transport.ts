@@ -15,7 +15,6 @@ export class Transport<Request extends any[], Reply extends any[]> {
         private ws: NetworkApi.WebSocket
     ) { }
 
-    private nextMessageBase = TestTools.uuidv4().substr(0, 3) + '#'
     private nextMessageId = 1
 
     private networkQueue = new Queue.Queue<{ messageId: string; request: Request }>('network')
@@ -80,7 +79,7 @@ export class Transport<Request extends any[], Reply extends any[]> {
                     if (!request)
                         break
 
-                    let messageId = this.nextMessageBase + (this.nextMessageId++)
+                    let messageId = (this.nextMessageId++).toString()
 
                     await this.networkQueuePusher({ messageId, request })
                     try {
