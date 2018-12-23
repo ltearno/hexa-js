@@ -65,7 +65,7 @@ export class Transport<Request extends any[], Reply extends any[]> {
                 while (true) {
                     let { id, reply } = await this.rxin()
                     try {
-                        this.ws.send(Serialisation.serialize([TYPE_REPLY, id, reply]))
+                        this.ws.send(Serialisation.serialize([TYPE_REPLY, id].concat(reply)))
                     }
                     catch (err) {
                         //console.warn(`error sending on ws, will probably close soon`)
