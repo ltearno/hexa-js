@@ -28,7 +28,7 @@ export async function hashString(value: string): Promise<string> {
 
 export function hashStringSync(value: string): string {
     var md = forge.md.sha256.create();
-    md.update(value);
+    md.update(value, 'utf8');
     return md.digest().toHex()
 }
 
