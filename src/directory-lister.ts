@@ -36,7 +36,6 @@ function* iterateRecursivelyOverDirectory(path: string, stateCallback?: (nbFiles
                     .readFileSync(hbIgnorePath, 'utf8')
                     .split(/\r\n|\n\r|\n|\r/g)
                     .filter(line => !line.startsWith('#') && line.trim().length)
-                //.map(line => //fsPath.relative(path, fsPath.join(currentPath, line)))
                 lines.forEach(line => {
                     try {
                         let regexp = new RegExp(line, 'ig')

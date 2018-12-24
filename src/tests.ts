@@ -3,11 +3,14 @@ import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
 import * as fs from 'fs'
+import * as fsTools from './FsTools'
+import * as fsPath from 'path'
 import * as Tools from './express-tools'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as DirectoryLister from './directory-lister'
 import * as Transport from './network-transport'
 import * as HashTools from './hash-tools'
+import * as Log from './log'
 
 /**
  * TODO
@@ -18,6 +21,8 @@ import * as HashTools from './hash-tools'
  * calling rpcProxy and pushing a call message are just two ways for the same
  * thing
  */
+
+const log = Log.buildLogger('tests')
 
 enum RequestType {
     AddShaInTx = 0,
@@ -306,16 +311,17 @@ async function run() {
     //server()
     //client()
 
-    let h = await HashTools.hashString('toto')
-    let hh = await HashTools.hashString(Buffer.from('toto') as string)
-    console.log(`toto : ${h} ${hh}`)
+    /*let h = await HashTools.hashString('toto')
 
     let p = `/home/arnaud/Téléchargements/source-code-pro-2.030R-ro-1.050R-it.zip`
     let sha = await HashTools.hashFile(p)
-    console.log(`${sha}`)
+    console.log(`${sha}`)*/
+
+    let browser = new DirectoryBrowser()
 }
 
 run()
+
 
 
 class FileStreamToQueuePipe {
