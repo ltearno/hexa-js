@@ -1,3 +1,7 @@
+import * as Log from '../log'
+
+const log = Log.buildLogger('queues')
+
 const IS_DEBUG = false
 const IS_DIAGNOSTICS = false
 
@@ -6,7 +10,7 @@ if (IS_DIAGNOSTICS) {
     setInterval(() => {
         console.log(`#### QUEUES DIAGNOSTIC`)
         console.log(`${weakQueuesList.size} queues`)
-        weakQueuesList.forEach(queue=>{
+        weakQueuesList.forEach(queue => {
             console.log(`- ${queue.name}: ${queue.size()}`)
         })
         console.log(`####`)
@@ -147,7 +151,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
 
 export function waitPopper<T>(q: QueueRead<T> & QueueMng): Popper<T> {
     return async () => {
-        return await waitForSomethingAvailable(q)
+        return await waitAndPop(q)
     }
 }
 
@@ -157,7 +161,7 @@ export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: nu
     }
 }
 
-async function waitForSomethingAvailable<T>(q: QueueRead<T> & QueueMng): Promise<T> {
+async function waitAndPop<T>(q: QueueRead<T> & QueueMng): Promise<T> {
     if (q.empty()) {
         await new Promise(resolve => {
             let l = q.addLevelListener(1, 1, () => {
@@ -202,5 +206,39 @@ export async function tunnelTransform<S, D>(popper: Popper<S>, addShaInTxPusher:
         let transformed = await t(item)
 
         await addShaInTxPusher(transformed)
+    }
+}
+
+export async function waitForQueue(q: Queue<any>): Promise<void> {
+    if (q.empty()) {
+        await new Promise(resolve => {
+            let l = q.addLevelListener(1, 1, () => {
+                l.forget()
+                resolve()
+            })
+        })
+    }
+}
+
+export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; listener: (q: T) => void }[], rpcTxPusher: Pusher<T>) {
+    while (sourceQueues.length) {
+        if (sourceQueues.every(source => source.queue.empty()))
+            await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
+
+        let rpcRequest = null
+        for (let i = 0; i < sourceQueues.length; i++) {
+            if (!sourceQueues[i].queue.empty()) {
+                rpcRequest = sourceQueues[i].queue.pop()
+                sourceQueues[i].listener && sourceQueues[i].listener(rpcRequest)
+                if (rpcRequest) {
+                    await rpcTxPusher(rpcRequest)
+                }
+                else {
+                    log.dbg(`finished source ${sourceQueues[i].queue.name}`)
+                    sourceQueues.splice(i, 1)
+                }
+                break
+            }
+        }
     }
 }

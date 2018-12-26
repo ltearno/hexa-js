@@ -317,7 +317,7 @@ async function run() {
     let sha = await HashTools.hashFile(p)
     console.log(`${sha}`)*/
 
-    let browser = new DirectoryBrowser()
+    //let browser = new DirectoryBrowser()
 }
 
 run()
