@@ -161,7 +161,7 @@ export function waitPusher<T>(q: QueueWrite<T> & QueueMng, high: number, low: nu
     }
 }
 
-async function waitAndPop<T>(q: QueueRead<T> & QueueMng): Promise<T> {
+export async function waitAndPop<T>(q: QueueRead<T> & QueueMng): Promise<T> {
     if (q.empty()) {
         await new Promise(resolve => {
             let l = q.addLevelListener(1, 1, () => {
@@ -175,7 +175,7 @@ async function waitAndPop<T>(q: QueueRead<T> & QueueMng): Promise<T> {
 }
 
 // wait so that queue stays lower than high and higher than low levels
-async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
+export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high: number, low: number) {
     if (high < low)
         throw 'impossible waitandpush !'
 
