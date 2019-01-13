@@ -85,6 +85,7 @@ export class Transport<Request extends any[], Reply extends any[]> {
 
                     await this.networkQueuePusher({ messageId, request })
                     try {
+                        //Serialisation.serializeSend([TYPE_REQUEST, messageId].concat(request), this.ws)
                         this.ws.send(Serialisation.serialize([TYPE_REQUEST, messageId].concat(request)))
                     }
                     catch (err) {

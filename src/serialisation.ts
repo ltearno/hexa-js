@@ -94,6 +94,34 @@ export function serialize(args: any[]): Buffer {
     return result;
 }
 
+export function serializeSend(args: any[], sender: any) {
+    sender.send(buffer.extract(buffer.writeByte(0, args.length)))
+
+    for (let p in args) {
+        let arg = args[p];
+
+        try {
+            if (arg === null) {
+                sender.send(buffer.extract(buffer.writeByte(0, TYPE_NULL)))
+            }
+            else if (arg === undefined) {
+                sender.send(buffer.extract(buffer.writeByte(0, TYPE_UNDEFINED)))
+            }
+            else if (arg instanceof Buffer) {
+                sender.send(buffer.extract(buffer.writeByte(0, TYPE_BUFFER)))
+                sender.send(arg)
+            }
+            else {
+                sender.send(buffer.extract(buffer.writeByte(0, TYPE_ANY)))
+                sender.send(buffer.extract(buffer.writeAny(0, arg)))
+            }
+        }
+        catch (error) {
+            throw `error serializing param ${p} ${arg} ${JSON.stringify(arg)} in ${JSON.stringify(args)} : ${error}`;
+        }
+    }
+}
+
 export function deserialize(buffer: Buffer): any[] {
     let currentOffset = 0
 
