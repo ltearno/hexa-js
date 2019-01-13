@@ -220,6 +220,15 @@ export async function waitForQueue(q: Queue<any>): Promise<void> {
     }
 }
 
+export async function waitLevel(q: Queue<any>, level: number, front: number): Promise<void> {
+    await new Promise(resolve => {
+        let l = q.addLevelListener(level, front, () => {
+            l.forget()
+            resolve()
+        })
+    })
+}
+
 export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; listener: (q: T) => void }[], rpcTxPusher: Pusher<T>) {
     while (sourceQueues.length) {
         if (sourceQueues.every(source => source.queue.empty()))
