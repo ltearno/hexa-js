@@ -6,6 +6,17 @@ export function fileExists(path: string) {
     });
 }
 
+export function mkdir(path: string) {
+    return new Promise<boolean>((resolve, reject) => {
+        fs.mkdir(path, err => {
+            if (err)
+                reject(err)
+            else
+                resolve(true)
+        })
+    })
+}
+
 export function lstat(path: string) {
     return new Promise<fs.Stats>((resolve, reject) => {
         fs.lstat(path, (err, stats) => {

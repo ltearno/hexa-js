@@ -181,7 +181,8 @@ export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high:
 
     if (q.size() > high) {
         await new Promise(resolve => {
-            q.addLevelListener(low, -1, () => {
+            let l = q.addLevelListener(low, -1, () => {
+                l.forget()
                 resolve()
             })
         })

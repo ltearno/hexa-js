@@ -1,10 +1,8 @@
-import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, directPusher, tunnelTransform, Pusher } from './queue/queue'
+import { Queue, QueueWrite, QueueMng, waitPusher, waitPopper, directPusher, tunnelTransform, Pusher, ListenerSubscription } from './queue/queue'
 import { StreamToQueuePipe } from './queue/pipe-stream-to-queue'
 import { Readable } from 'stream'
 
 import * as fs from 'fs'
-import * as fsTools from './FsTools'
-import * as fsPath from 'path'
 import * as Tools from './express-tools'
 import * as NetworkApiImpl from './network-api-node-impl'
 import * as DirectoryLister from './directory-lister'
@@ -326,6 +324,8 @@ run()
 
 class FileStreamToQueuePipe {
     private s: Readable
+    private highListener: ListenerSubscription
+    private lowListener: ListenerSubscription
 
     constructor(path: string, private sha: string, private offset: number, private q: QueueWrite<ShaBytes> & QueueMng, high: number = 10, low: number = 5) {
         this.s = fs.createReadStream(path, { flags: 'r', autoClose: true, start: offset, encoding: null })
@@ -333,14 +333,14 @@ class FileStreamToQueuePipe {
         let paused = false
 
         // queue has too much items => pause inputs
-        q.addLevelListener(high, 1, () => {
+        this.highListener = q.addLevelListener(high, 1, () => {
             //console.log(`pause inputs`)
             paused = true
             this.s.pause()
         })
 
         // queue has low items => resume inputs
-        q.addLevelListener(low, -1, () => {
+        this.lowListener = q.addLevelListener(low, -1, () => {
             //console.log(`resume reading`)
             if (paused)
                 this.s.resume()
@@ -359,9 +359,13 @@ class FileStreamToQueuePipe {
                     chunk as Buffer
                 ])
             }).on('end', () => {
+                this.highListener.forget()
+                this.lowListener.forget()
                 resolve(true)
             }).on('error', (err) => {
                 console.log(`stream error ${err}`)
+                this.highListener.forget()
+                this.lowListener.forget()
                 reject(err)
             })
         })
