@@ -244,15 +244,16 @@ export async function waitLevel(q: Queue<any>, level: number, front: number): Pr
 export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; listener: (q: T) => void }[], rpcTxPusher: Pusher<T>) {
     let sourceIndex = 0
 
+    let waitListeners: ListenerSubscription[] = []
     let waiterPromiseResolver = null
     sourceQueues.forEach(({ queue }) => {
-        queue.addLevelListener(1, 1, () => {
+        waitListeners.push(queue.addLevelListener(1, 1, () => {
             if (waiterPromiseResolver) {
                 let resolver = waiterPromiseResolver
                 waiterPromiseResolver = null
                 resolver()
             }
-        })
+        }))
     })
 
     while (sourceQueues.length) {
@@ -283,4 +284,6 @@ export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; lis
 
         sourceIndex = (sourceIndex + 1) % sourceQueues.length
     }
+
+    waitListeners.forEach(l => l.forget())
 }
