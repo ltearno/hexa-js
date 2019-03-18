@@ -1,5 +1,4 @@
 import * as Log from '../log'
-import { Tools } from '..';
 
 const log = Log.buildLogger('queues')
 
