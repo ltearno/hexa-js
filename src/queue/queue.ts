@@ -1,4 +1,5 @@
 import * as Log from '../log'
+import { Tools } from '..';
 
 const log = Log.buildLogger('queues')
 
@@ -244,7 +245,8 @@ export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; lis
     let sourceIndex = 0
     while (sourceQueues.length) {
         if (sourceQueues.every(source => source.queue.empty()))
-            await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
+            await Tools.wait(10)
+        //await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
 
         let rpcRequest = null
         for (let sourceOffset = 0; sourceOffset < sourceQueues.length; sourceOffset++) {
