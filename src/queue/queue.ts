@@ -3,7 +3,7 @@ import * as Log from '../log'
 const log = Log.buildLogger('queues')
 
 const IS_DEBUG = false
-const IS_DIAGNOSTICS = false
+const IS_DIAGNOSTICS = true
 
 const weakQueuesList = new Set<Queue<any>>()
 if (IS_DIAGNOSTICS) {
@@ -11,7 +11,7 @@ if (IS_DIAGNOSTICS) {
         console.log(`#### QUEUES DIAGNOSTIC`)
         console.log(`${weakQueuesList.size} queues`)
         weakQueuesList.forEach(queue => {
-            console.log(`- ${queue.name}: ${queue.size()}`)
+            console.log(`- ${queue.diagnose()}`)
         })
         console.log(`####`)
     }, 5000)
@@ -58,6 +58,16 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
     constructor(public name: string) {
         if (IS_DIAGNOSTICS)
             weakQueuesList.add(this)
+    }
+
+    diagnose() {
+        let downSum = 0
+        this.listenersDown.forEach((v, k) => { downSum += v.size })
+        let upSum = 0
+        this.listenersUp.forEach((v, k) => { upSum += v.size })
+        let levelSum = 0
+        this.listenersLevel.forEach((v, k) => { levelSum += v.size })
+        return `"${this.name}" size:${this.size} listeners: u:${upSum} d:${downSum} l:${levelSum}`
     }
 
     size() {
@@ -171,7 +181,7 @@ export async function waitAndPop<T>(q: QueueRead<T> & QueueMng): Promise<T> {
         })
     }
 
-    return await q.pop()
+    return q.pop()
 }
 
 // wait so that queue stays lower than high and higher than low levels
@@ -188,7 +198,7 @@ export async function waitAndPush<T>(q: QueueWrite<T> & QueueMng, data: T, high:
         })
     }
 
-    return await q.push(data)
+    return q.push(data)
 }
 
 export function directPusher<T>(q: Queue<T>): Pusher<T> {
