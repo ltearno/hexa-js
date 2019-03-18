@@ -4,7 +4,7 @@ import { Tools } from '..';
 const log = Log.buildLogger('queues')
 
 const IS_DEBUG = false
-const IS_DIAGNOSTICS = true
+const IS_DIAGNOSTICS = false
 
 const weakQueuesList = new Set<Queue<any>>()
 if (IS_DIAGNOSTICS) {
