@@ -241,12 +241,14 @@ export async function waitLevel(q: Queue<any>, level: number, front: number): Pr
 }
 
 export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; listener: (q: T) => void }[], rpcTxPusher: Pusher<T>) {
+    let sourceIndex = 0
     while (sourceQueues.length) {
         if (sourceQueues.every(source => source.queue.empty()))
             await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
 
         let rpcRequest = null
-        for (let i = 0; i < sourceQueues.length; i++) {
+        for (let sourceOffset = 0; sourceOffset < sourceQueues.length; sourceOffset++) {
+            let i = (sourceOffset + sourceIndex) % sourceQueues.length
             if (!sourceQueues[i].queue.empty()) {
                 rpcRequest = sourceQueues[i].queue.pop()
                 sourceQueues[i].listener && sourceQueues[i].listener(rpcRequest)
@@ -260,5 +262,7 @@ export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; lis
                 break
             }
         }
+
+        sourceIndex = (sourceIndex + 1) % sourceQueues.length
     }
 }
