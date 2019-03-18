@@ -243,9 +243,25 @@ export async function waitLevel(q: Queue<any>, level: number, front: number): Pr
 
 export async function manyToOneTransfert<T>(sourceQueues: { queue: Queue<T>; listener: (q: T) => void }[], rpcTxPusher: Pusher<T>) {
     let sourceIndex = 0
+
+    let waiterPromiseResolver = null
+    sourceQueues.forEach(({ queue }) => {
+        queue.addLevelListener(1, 1, () => {
+            if (waiterPromiseResolver) {
+                let resolver = waiterPromiseResolver
+                waiterPromiseResolver = null
+                resolver()
+            }
+        })
+    })
+
     while (sourceQueues.length) {
-        if (sourceQueues.every(source => source.queue.empty()))
-            await Tools.wait(10)
+        if (sourceQueues.every(source => source.queue.empty())) {
+            await new Promise(resolve => {
+                waiterPromiseResolver = resolve
+            })
+        }
+        //await Tools.wait(10)
         //await Promise.race(sourceQueues.map(source => waitForQueue(source.queue)))
 
         let rpcRequest = null
