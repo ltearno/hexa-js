@@ -67,7 +67,7 @@ export class Queue<T> implements QueueRead<T>, QueueWrite<T>, QueueMng {
         this.listenersUp.forEach((v, k) => { upSum += v.size })
         let levelSum = 0
         this.listenersLevel.forEach((v, k) => { levelSum += v.size })
-        return `"${this.name}" size:${this.size} listeners: u:${upSum} d:${downSum} l:${levelSum}`
+        return `"${this.name}" size:${this.size()} listeners: u:${upSum} d:${downSum} l:${levelSum}`
     }
 
     size() {
