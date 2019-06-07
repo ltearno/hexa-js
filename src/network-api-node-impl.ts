@@ -3,8 +3,8 @@ import * as WebSocket from 'ws'
 import * as Request from 'request'
 
 export class NetworkApiNodeImpl implements NetworkApi.NetworkApi {
-    createClientWebSocket(endpoint: string): NetworkApi.WebSocket {
-        return new WebSocket(endpoint)
+    createClientWebSocket(endpoint: string, headers?: { [name: string]: string }): NetworkApi.WebSocket {
+        return new WebSocket(endpoint, { headers })
     }
 
     get<T>(url: string): Promise<T> {

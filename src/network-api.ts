@@ -5,5 +5,5 @@ export interface WebSocket {
 }
 
 export interface NetworkApi {
-    createClientWebSocket(endpoint: string): WebSocket
+    createClientWebSocket(endpoint: string, headers?: { [name: string]: string }): WebSocket
 }

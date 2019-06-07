@@ -1,7 +1,7 @@
 import * as NetworkApi from './network-api'
 
 export class NetworkClientBrowserImpl implements NetworkApi.NetworkApi {
-    createClientWebSocket(endpoint: string): NetworkApi.WebSocket {
+    createClientWebSocket(endpoint: string, headers?: { [name: string]: string }): NetworkApi.WebSocket {
         let socket = new WebSocket(endpoint)
 
         let result: NetworkApi.WebSocket = {
